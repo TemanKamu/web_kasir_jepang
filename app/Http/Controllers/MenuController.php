@@ -4,23 +4,32 @@ namespace App\Http\Controllers;
 
 use App\Events\MenuCreated;
 use App\Events\MenuUpdated;
-use App\Model\Category;
-use App\Model\Menu;
+use App\Models\Category;
+use App\Models\Menu;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 
 class MenuController extends Controller
 {
     public function index()
     {
-        $menus = Menu::with('category')->get();
-        return view('menus.index', compact('menus'));
+        $products = Menu::with('category')->get();
+        if (Auth::check()){
+            if (Auth::id() && Auth::user() && Auth::user()->role_id == 1){
+                return view('Admin.index', compact('products'));
+            }else{
+                return view('User.index', compact('products'));
+            }
+        }else{
+            return redirect()->route('login');
+        }
     }
 
     public function create()
     {
         $categories = Category::all();
-        return view('menus.create', compact('categories'));
+        return view('', compact('categories'));
     }
 
     public function store(Request $request)

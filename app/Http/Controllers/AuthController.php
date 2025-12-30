@@ -26,8 +26,8 @@ class AuthController extends Controller
 
         if(Auth::attempt($credentials)){
             $request->session()->regenerate();
-            die($request->email);
-            return redirect()->intended('Main.index');
+         // Jika menggunakan nama route yang kamu buat di web.php
+        return redirect()->intended(route('menus.index'));
         }
         return back()->withErrors([
             'email' => 'Email atau password yang kamu masukkan salah.',

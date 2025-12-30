@@ -1,6 +1,6 @@
 <?php
 
-namespace App\Model;
+namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -12,12 +12,9 @@ class Category extends Model
 
     protected $fillable = [
         'name',
-        'image',
-        'image_url'
     ];
-
-    public function menus()
+    public function subCategories()
     {
-        return $this->hasMany(Menu::class);
+        return $this->hasMany(SubCategories::class);
     }
 }

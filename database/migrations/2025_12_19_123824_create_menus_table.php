@@ -18,7 +18,7 @@ return new class extends Migration
             $table->integer('price');
             $table->text('image')->nullable();
             $table->text('image_url')->nullable();
-            $table->foreignId('category_id')->constrained('categories')->onDelete('cascade');
+            $table->foreignId('sub_category_id')->constrained('sub_categories')->onDelete('cascade');
             $table->integer('count_sold')->default(0);
             $table->enum('status', ['available', 'unavailable'])->default('available');
             $table->timestamps();

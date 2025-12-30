@@ -1,8 +1,7 @@
 <?php
 
 namespace App\Models;
-
-use App\Model\OrderedMenu;
+use App\Models\OrderedMenu;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
