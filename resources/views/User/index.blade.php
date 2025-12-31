@@ -19,6 +19,7 @@
         openAdd: false,
         openDetail: false,
         selectedMenu: {},
+        search: '',
     }">
     
      {{-- Modal Detail Menu --}}
@@ -84,11 +85,9 @@
     <div class="flex h-screen flex-col overflow-hidden">
         
         <header class="bg-white border-b px-6 py-2 flex items-center justify-between h-20 shadow-sm z-10">
-            <div class="flex items-center gap-3 w-56">
-                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                    <i class="fas fa-torii-gate text-2xl"></i>
-                </div>
-                <h1 class="text-3xl font-bold text-[#4a90e2] tracking-tight">Kaisei</h1>
+             <div class="flex items-center gap-3 w-48">
+                <img src="{{ asset('image/Logo.png') }}" alt="Logo" class="h-12">
+                <h1 class="text-3xl font-bold text-[#4a90e2]">Kaisei</h1>
             </div>
 
         </header>
@@ -131,7 +130,11 @@
                         <span class="absolute inset-y-0 left-0 flex items-center pl-5">
                             <i class="fas fa-search text-gray-300 text-lg"></i>
                         </span>
-                        <input type="text" class="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 shadow-sm rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-gray-600" placeholder="Search">
+                        {{-- Tambahkan x-model di sini --}}
+                        <input type="text" 
+                            x-model="search" 
+                            class="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 shadow-sm rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-gray-600 font-semibold" 
+                            placeholder="Cari menu favoritmu...">
                     </div>
                 </div>
                 
@@ -159,10 +162,15 @@
                                             $menuData = $menu->toArray();
                                             $menuData['sub_category'] = $sub; 
                                         @endphp
-
-                                        <div @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
-                                            class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
-                                            
+                                     
+                                    
+                                        <div x-show="'{{ strtolower($menu->name) }}'.includes(search.toLowerCase())"
+                                        x-transition:enter="transition ease-out duration-300"
+                                        x-transition:enter-start="opacity-0 scale-95"
+                                        x-transition:enter-end="opacity-100 scale-100"
+                                        @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
+                                        class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
+                                              
                                             {{-- BADGE BEST SELLER OTOMATIS --}}
                                             {{-- Muncul jika count_sold menu ini sama dengan nilai tertinggi DAN bukan 0 --}}
                                             @if($menu->count_sold > 0 && $menu->count_sold == $maxSold)
@@ -208,6 +216,14 @@
                                             </div>
                                         </div>
                                     @endforeach
+                                     {{-- Pesan jika pencarian tidak ditemukan --}}
+                                    <div x-show="search !== '' && !Array.from($el.parentElement.children).some(el => el.style.display !== 'none' && el.tagName === 'DIV')" 
+                                        class="col-span-full py-20 text-center">
+                                        <div class="bg-gray-50 inline-block p-8 rounded-[3rem]">
+                                            <i class="fas fa-search-minus text-4xl text-gray-200 mb-4"></i>
+                                            <p class="text-gray-400 font-bold uppercase tracking-widest text-xs">Menu tidak ditemukan</p>
+                                        </div>
+                                    </div>
                                 </div>
                             @endif
                         @endforeach

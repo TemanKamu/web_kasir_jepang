@@ -19,6 +19,7 @@
 </head>
 <body class="bg-[#f0f4f8] font-sans text-gray-800"
   x-data="{ 
+    search: '',
     openAdd: false, 
     openDetail: false, 
     openEdit: false,
@@ -26,6 +27,11 @@
     openAddSub: false, 
     selectedMenu: {}, 
     editData: {},
+    openEditCategory: false,
+    editCategoryData: {},
+    imagePreviewCategory: null,
+    openEditSub: false,
+    editSubData: { name: '', id: '', category_id: '' }, // Beri default object
 
     // Helper untuk ambil CSRF secara aman
     getCsrf() {
@@ -47,15 +53,28 @@
             const data = await response.json();
 
             if (response.ok && data.success) {
-                this.selectedMenu.status = data.new_status;
-                console.log('Status updated to: ' + data.new_status);
+                // Update state di frontend agar tombol/label berubah seketika
+                if (this.selectedMenu && this.selectedMenu.id == id) {
+                    this.selectedMenu.status = data.new_status;
+                }
+
+                // Kirim notifikasi
+                window.dispatchEvent(new CustomEvent('notify', { 
+                    detail: { 
+                        message: `Status menu sekarang: ${data.new_status.toUpperCase()}`, 
+                        type: 'success' 
+                    } 
+                }));
+
             } else {
-                // Ini akan menangkap error 500 dan menampilkan pesan dari Laravel
                 throw new Error(data.message || 'Server Error 500');
             }
         } catch (error) {
             console.error('Error:', error);
-            alert('Gagal update status: ' + error.message);
+            // Ganti alert dengan notifikasi error agar konsisten
+            window.dispatchEvent(new CustomEvent('notify', { 
+                detail: { message: error.message, type: 'error' } 
+            }));
         }
     },
 
@@ -80,8 +99,10 @@
             });
 
             if (response.ok) {
-                this.openEdit = false;
-                window.location.reload(); 
+                this.openEdit = false; // Tutup dulu modalnya
+                window.dispatchEvent(new CustomEvent('notify', { 
+                    detail: { message: 'Status Berhasil Diubah!', type: 'success' } 
+                }));
             } else {
                 alert('Gagal update data');
             }
@@ -102,13 +123,73 @@
                 }
             });
             const data = await response.json();
-            if (data.success) window.location.reload();
+           if (data.success) {
+                this.openDetail = false; // Tutup dulu detailnya
+                window.dispatchEvent(new CustomEvent('notify', { 
+                    detail: { message: 'Menu Berhasil Dihapus!', type: 'success' } 
+                }));
+            } else {
+                alert('Gagal menghapus menu');
+            }
         } catch (error) {
             console.error(error);
         }
     }
 }"
  @close-modal-add.window="openAdd = false">
+    <div x-data="{ 
+            show: false, 
+            message: '', 
+            type: 'success'
+        }" 
+        x-init="
+            @if(session('success'))
+                message = '{{ session('success') }}';
+                type = 'success';
+                show = true;
+                setTimeout(() => show = false, 4000);
+            @endif
+            @if($errors->any())
+                message = '{{ $errors->first() }}';
+                type = 'error';
+                show = true;
+                setTimeout(() => show = false, 4000);
+            @endif
+             window.addEventListener('notify', e => {
+                message = e.detail.message;
+                type = e.detail.type;
+                show = true;
+                setTimeout(() => show = false, 4000);
+            });
+        "
+        x-show="show" 
+        x-transition:enter="transition ease-out duration-300"
+        x-transition:enter-start="opacity-0 transform translate-y-4"
+        x-transition:enter-end="opacity-100 transform translate-y-0"
+        x-transition:leave="transition ease-in duration-200"
+        x-transition:leave-start="opacity-100 transform translate-y-0"
+        x-transition:leave-end="opacity-0 transform translate-y-4"
+        class="fixed bottom-5 right-5 z-[200] min-w-[300px]"
+        x-cloak>
+        
+        <div :class="type === 'success' ? 'bg-emerald-500' : 'bg-red-500'" 
+            class="text-white px-6 py-4 rounded-3xl shadow-2xl flex items-center justify-between gap-4 border-4 border-white">
+            
+            <div class="flex items-center gap-3">
+                <template x-if="type === 'success'">
+                    <i class="fas fa-check-circle text-xl"></i>
+                </template>
+                <template x-if="type === 'error'">
+                    <i class="fas fa-exclamation-triangle text-xl"></i>
+                </template>
+                <span x-text="message" class="font-bold uppercase text-xs tracking-wider"></span>
+            </div>
+
+            <button @click="show = false" class="hover:scale-125 transition-transform">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    </div>
     {{-- Pop up Section --}}
     <div x-show="openAdd" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
         <form action="{{ route('menus.store') }}" method="POST" enctype="multipart/form-data" 
@@ -124,7 +205,6 @@
                 },
                 async submitForm(event) {
                     const formData = new FormData(event.target);
-                    
                     try {
                         const response = await fetch(event.target.action, {
                             method: 'POST',
@@ -136,13 +216,17 @@
                         });
 
                         if (response.ok) {
-                            window.dispatchEvent(new CustomEvent('close-modal-add'));
-                            event.target.reset();
-                            this.imagePreview = null;
-                            console.log('Menu berhasil disimpan');
-                        } else {
-                            const errorData = await response.json();
-                            alert('Gagal simpan: ' + JSON.stringify(errorData.errors));
+                            const data = await response.json();
+                            // Tutup Modal
+                            this.openAdd = false; 
+                            
+                            // Trigger Notifikasi
+                            window.dispatchEvent(new CustomEvent('notify', { 
+                                detail: { message: data.message || 'Berhasil!', type: 'success' } 
+                            }));
+
+                            // OPTIONAL: Reload hanya setelah toast selesai (misal 3 detik)
+                            // setTimeout(() => window.location.reload(), 3000); 
                         }
                     } catch (error) {
                         console.error('Error:', error);
@@ -203,6 +287,15 @@
                         <input type="file" name="image" class="absolute inset-0 opacity-0 cursor-pointer" @change="handleFile($event)" accept="image/*">
                     </div>
                 </div>
+                @if ($errors->any())
+                    <div class="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl">
+                        <ul class="list-disc list-inside text-sm text-red-600 font-bold">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
             </div>
 
             <div class="grid grid-cols-2 gap-4 mt-10">
@@ -308,6 +401,15 @@
                 <button type="button" @click="openAddSub = false" class="py-4 border-2 border-blue-500 text-blue-500 rounded-2xl font-black uppercase hover:bg-blue-50 transition-colors text-sm">Batal</button>
                 <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-colors text-sm">Simpan</button>
             </div>
+            @if ($errors->any())
+                <div class="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl">
+                    <ul class="list-disc list-inside text-sm text-red-600 font-bold">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
         </form>
     </div>
     <div x-show="openEdit" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
@@ -345,6 +447,15 @@
                     <input type="file" name="image" @change="handleEditFile($event)" 
                         class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
                 </div>
+                @if ($errors->any())
+                    <div class="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl">
+                        <ul class="list-disc list-inside text-sm text-red-600 font-bold">
+                            @foreach ($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                    </div>
+                @endif
             </div>
 
             <div class="flex gap-4 mt-8">
@@ -438,16 +549,162 @@
             </div>
         </div>
     </div>
+    <div x-show="openEditCategory" x-cloak class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl relative transition-all">
+            
+            {{-- TOMBOL CLOSE (X) DI SUDUT ATAS --}}
+            <button @click="openEditCategory = false; imagePreviewCategory = null;" 
+                class="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+
+            <form :action="'/categories/' + editCategoryData.id" method="POST" enctype="multipart/form-data">
+                @csrf
+                @method('PUT')
+                
+                <h2 class="text-3xl font-black text-[#1e3a8a] text-center mb-8 uppercase tracking-tight">Edit Kategori</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Nama Kategori</label>
+                        <input type="text" name="name" x-model="editCategoryData.name" required class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-gray-700">
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Icon Kategori</label>
+                        <div class="relative border-2 border-dashed border-gray-200 rounded-3xl p-6 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors group min-h-[160px]">
+                            
+                            <template x-if="imagePreviewCategory">
+                                <div class="relative w-full h-full flex flex-col items-center">
+                                    <img :src="imagePreviewCategory" class="w-24 h-24 object-contain rounded-xl mb-2 shadow-md">
+                                    <p class="text-[10px] font-black text-blue-500 uppercase italic">Ganti Icon</p>
+                                </div>
+                            </template>
+
+                            <input type="file" name="image" x-ref="editImageInput" class="absolute inset-0 opacity-0 cursor-pointer"    
+                                @change="
+                                    const file = $event.target.files[0];
+                                    if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = (e) => { imagePreviewCategory = e.target.result; };
+                                        reader.readAsDataURL(file);
+                                    }
+                                ">
+                                @if ($errors->any())
+                                    <div class="mb-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl">
+                                        <ul class="list-disc list-inside text-sm text-red-600 font-bold">
+                                            @foreach ($errors->all() as $error)
+                                                <li>{{ $error }}</li>
+                                            @endforeach
+                                        </ul>
+                                    </div>
+                                @endif
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mt-10">
+                    {{-- TOMBOL HAPUS (Memicu Form Hapus Terpisah) --}}
+                    <button type="button" 
+                        @click="
+                            if(confirm('Peringatan Keras: Hapus kategori ini?')) {
+                                if(confirm('Data Sub-Kategori dan SEMUA MENU di dalamnya akan ikut terhapus selamanya. Anda yakin?')) {
+                                    document.getElementById('delete-category-form').submit();
+                                }
+                            }
+                        " 
+                        class="py-4 border-2 border-red-500 text-red-500 rounded-2xl font-black uppercase hover:bg-red-50 transition-colors text-sm">
+                        Hapus
+                    </button>
+                    
+                    <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg hover:bg-blue-600 transition-colors text-sm">
+                        Simpan
+                    </button>
+                </div>
+            </form>
+
+            {{-- FORM HAPUS TERPISAH (HIDDEN) --}}
+            <form id="delete-category-form" :action="'/categories/' + editCategoryData.id" method="POST" class="hidden">
+                @csrf
+                @method('DELETE')
+            </form>
+        </div>
+    </div>
+    <div x-show="openEditSub" x-cloak class="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div class="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl relative transition-all">
+            
+            {{-- TOMBOL CLOSE (X) --}}
+            <button @click="openEditSub = false" class="absolute top-8 right-8 text-gray-400 hover:text-red-500 transition-colors">
+                <i class="fas fa-times text-xl"></i>
+            </button>
+
+            <form :action="'/sub-categories/' + editSubData.id" method="POST">
+                @csrf
+                @method('PUT')
+                
+                <h2 class="text-3xl font-black text-[#1e3a8a] text-center mb-8 uppercase tracking-tight">Edit Sub Kategori</h2>
+                
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase tracking-wide">Nama Sub Kategori</label>
+                        <input 
+                            type="text" 
+                            name="name" 
+                            x-model="editSubData.name" 
+                            required 
+                            placeholder="Nama Sub Kategori"
+                            class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold text-gray-700 shadow-sm transition-all"
+                        >
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Induk Kategori</label>
+                        <select name="category_id" x-model="editSubData.category_id" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none font-semibold text-gray-700">
+                            {{-- UBAH $categories MENJADI $groupedCategories --}}
+                            @foreach($groupedCategories as $cat)
+                                <option value="{{ $cat->id }}" :selected="editSubData.category_id == {{ $cat->id }}">
+                                    {{ $cat->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-4 mt-10">
+                    {{-- TOMBOL HAPUS DENGAN 2X KONFIRMASI --}}
+                    <button type="button" 
+                        @click="
+                            if(confirm('Peringatan 1: Anda yakin ingin menghapus sub-kategori ini?')) {
+                                if(confirm('Peringatan 2: SEMUA MENU di dalam sub-kategori ini akan terhapus PERMANEN. Lanjutkan?')) {
+                                    document.getElementById('delete-sub-form').submit();
+                                }
+                            }
+                        " 
+                        class="py-4 border-2 border-red-500 text-red-500 rounded-2xl font-black uppercase hover:bg-red-50 transition-colors text-sm">
+                        Hapus
+                    </button>
+                    
+                    <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg hover:bg-blue-600 transition-colors text-sm">
+                        Update
+                    </button>
+                </div>
+            </form>
+
+            {{-- FORM HAPUS (HIDDEN) --}}
+            <form id="delete-sub-form" :action="'/sub-categories/' + editSubData.id" method="POST" class="hidden">
+                @csrf
+                @method('DELETE')
+            </form>
+        </div>
+    </div>
     {{-- End Pop up Section --}}
     
     <div class="flex h-screen flex-col overflow-hidden">
         
         <header class="bg-white border-b px-6 py-2 flex items-center justify-between h-20 shadow-sm z-10">
-            <div class="flex items-center gap-3 w-56">
-                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white">
-                    <i class="fas fa-torii-gate text-2xl"></i>
-                </div>
-                <h1 class="text-3xl font-bold text-[#4a90e2] tracking-tight">Kaisei</h1>
+            <div class="flex items-center gap-3 w-48">
+                <img src="{{ asset('image/Logo.png') }}" alt="Logo" class="h-12">
+                <h1 class="text-3xl font-bold text-[#4a90e2]">Kaisei</h1>
             </div>
 
             <div class="flex-1 flex justify-start ml-10 gap-4">
@@ -476,17 +733,31 @@
                                 <img src="{{ asset($category->image) }}" alt="img" class="w-5 h-5 object-contain">
                                 {{ $category->name }}
                             </h3>
-                            <button class="text-gray-300 hover:text-blue-500 transition-colors">
+                            <button @click="
+                                editCategoryData = {{ json_encode($category) }}; 
+                                openEditCategory = true; 
+                                imagePreviewCategory = editCategoryData.image ? '/' + editCategoryData.image : null;
+                            " class="text-gray-300 hover:text-blue-500 transition-colors">
                                 <i class="fas fa-edit text-xs"></i>
                             </button>
                         </div>
 
                         <ul class="space-y-1 text-sm font-semibold text-gray-500">
                             @foreach($category->subCategories as $sub)
-                                <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer transition-all hover:text-[#3b82f6]" @click="document.getElementById('{{ Str::slug($sub->name) }}').scrollIntoView({ behavior: 'smooth' })">
-                                    {{ $sub->name }}
-                                    {{-- Dot indikator kalau mau --}}
-                                    <span class="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-[#3b82f6]"></span>
+                                <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer transition-all hover:text-[#3b82f6]" 
+                                    @click="document.getElementById('{{ Str::slug($sub->name) }}').scrollIntoView({ behavior: 'smooth' })">
+                                    <span>{{ $sub->name }}</span>
+
+                                    {{-- Button Edit: Muncul hanya saat Hover --}}
+                                    <button 
+                                        @click.stop="
+                                            editSubData = {{ json_encode($sub) }}; 
+                                            openEditSub = true;
+                                        "
+                                        class="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-blue-500 transition-all duration-200 p-1"
+                                    >
+                                        <i class="fas fa-edit text-xs"></i>
+                                    </button>
                                 </li>
                             @endforeach
                         </ul>
@@ -510,7 +781,11 @@
                         <span class="absolute inset-y-0 left-0 flex items-center pl-5">
                             <i class="fas fa-search text-gray-300 text-lg"></i>
                         </span>
-                        <input type="text" class="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 shadow-sm rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-gray-600" placeholder="Search">
+                        {{-- Tambahkan x-model di sini --}}
+                        <input type="text" 
+                            x-model="search" 
+                            class="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 shadow-sm rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-gray-600 font-semibold" 
+                            placeholder="Cari menu favoritmu...">
                     </div>
                 </div>
                 
@@ -543,10 +818,15 @@
                                             $menuData = $menu->toArray();
                                             $menuData['sub_category'] = $sub; 
                                         @endphp
-
-                                        <div @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
-                                            class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
-                                            
+                                     
+                                    
+                                        <div x-show="'{{ strtolower($menu->name) }}'.includes(search.toLowerCase())"
+                                        x-transition:enter="transition ease-out duration-300"
+                                        x-transition:enter-start="opacity-0 scale-95"
+                                        x-transition:enter-end="opacity-100 scale-100"
+                                        @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
+                                        class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
+                                              
                                             {{-- BADGE BEST SELLER OTOMATIS --}}
                                             {{-- Muncul jika count_sold menu ini sama dengan nilai tertinggi DAN bukan 0 --}}
                                             @if($menu->count_sold > 0 && $menu->count_sold == $maxSold)
@@ -592,6 +872,14 @@
                                             </div>
                                         </div>
                                     @endforeach
+                                     {{-- Pesan jika pencarian tidak ditemukan --}}
+                                    <div x-show="search !== '' && !Array.from($el.parentElement.children).some(el => el.style.display !== 'none' && el.tagName === 'DIV')" 
+                                        class="col-span-full py-20 text-center">
+                                        <div class="bg-gray-50 inline-block p-8 rounded-[3rem]">
+                                            <i class="fas fa-search-minus text-4xl text-gray-200 mb-4"></i>
+                                            <p class="text-gray-400 font-bold uppercase tracking-widest text-xs">Menu tidak ditemukan</p>
+                                        </div>
+                                    </div>
                                 </div>
                             @endif
                         @endforeach
@@ -627,10 +915,8 @@
    <script type="module">
         function startListening() {
             if (window.Echo) {
-                console.log('Echo detected! Connecting to Reverb...');
                 window.Echo.channel('pos-data-channel')
                     .listen('.data.changed', (e) => {
-                        console.log('Realtime update:', e.type);
                         window.location.reload();
                     });
             } else {

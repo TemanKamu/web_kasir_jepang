@@ -28,11 +28,6 @@ class MenuController extends Controller
         return view($view, compact('groupedCategories', 'products'));
     }
 
-    public function create()
-    {
-        $categories = Category::all();
-        return view('', compact('categories'));
-    }
 
     public function store(Request $request)
     {
@@ -61,48 +56,51 @@ class MenuController extends Controller
             // Trigger Realtime Reverb
             event(new \App\Events\DataUpdated('menu'));
 
-            return response()->json(['success' => true]);
+            return redirect()->back()->with('success', 'Menu berhasil ditambahkan!');
 
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return redirect()->back()->withErrors(['msg' => 'Gagal simpan: ' . $e->getMessage()]);
         }
     }
 
-    public function edit(Menu $menu)
-    {
-        $categories = Category::all();
-        return view('menus.edit', compact('menu', 'categories'));
-    }
 
     public function update(Request $request, $id)
     {
-        $menu = \App\Models\Menu::findOrFail($id);
+        try {
+            $request->validate([
+                'name' => 'required|string|max:255',
+                'price' => 'required|integer|min:0',
+                'sub_category_id' => 'required|exists:sub_categories,id',
+                'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            ]);
 
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'price' => 'required|integer',
-            'sub_category_id' => 'required|exists:sub_categories,id',
-        ]);
+            $menu = \App\Models\Menu::findOrFail($id);
+            $menu->name = $request->name;
+            $menu->price = $request->price;
+            $menu->sub_category_id = $request->sub_category_id;
+            $menu->status = $request->status ?? $menu->status;
 
-        $data = $request->only(['name', 'price', 'sub_category_id', 'desc']);
+            if ($request->hasFile('image')) {
+                // Hapus gambar lama jika ada
+                if ($menu->image) {
+                    Storage::disk('public')->delete($menu->image);
+                }
 
-        if ($request->hasFile('image')) {
-            // Hapus gambar lama
-            if ($menu->image) {
-                Storage::disk('public')->delete($menu->image);
+                $path = $request->file('image')->store('menus', 'public');
+                $menu->image = $path;
+                $menu->image_url = Storage::url($path);
             }
-            
-            $path = $request->file('image')->store('menus', 'public');
-            $data['image'] = $path;
-            $data['image_url'] = Storage::url($path);
+
+            $menu->save();
+
+            // Trigger Realtime agar semua orang tahu ada update menu
+            event(new \App\Events\DataUpdated('menu_updated'));
+
+            return redirect()->back()->with('success', 'Menu berhasil diupdate!');
+
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['msg' => 'Gagal update: ' . $e->getMessage()]);
         }
-
-        $menu->update($data);
-
-        // Broadcast update agar layar customer juga berubah harganya/gambarnya
-        event(new \App\Events\DataUpdated('menu_updated'));
-
-        return response()->json(['success' => true]);
     }
 
     public function destroy($id)
@@ -120,9 +118,9 @@ class MenuController extends Controller
             // Trigger Realtime agar menu hilang di layar semua orang
             event(new \App\Events\DataUpdated('menu_deleted'));
 
-            return response()->json(['success' => true]);
+            return redirect()->back()->with('success', 'Menu berhasil dihapus!');
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            return redirect()->back()->withErrors(['msg' => 'Gagal hapus: ' . $e->getMessage()]);
         }
     }
 
@@ -139,12 +137,10 @@ class MenuController extends Controller
                 event(new \App\Events\DataUpdated('menu_status_changed'));
             }
 
-            return response()->json([
-                'success' => true, 
-                'new_status' => $menu->status
-            ]);
+            return response()->json(['success' => true, 'new_status' => $menu->status]);
         } catch (\Exception $e) {
-            return response()->json(['success' => false, 'message' => $e->getMessage()], 500);
+            Log::error('Error toggling menu status: ' . $e->getMessage());
+            return response()->json(['success' => false, 'message' => 'Gagal mengubah status: ' . $e->getMessage()], 500);
         }
     }
 }

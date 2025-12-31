@@ -14,12 +14,6 @@ class CategoryController extends Controller
         $categories = Category::all();
         return view('categories.index', compact('categories'));
     }
-
-    public function create()
-    {
-        return view('categories.create');
-    }
-
     public function store(Request $request)
     {
         $request->validate([
@@ -42,45 +36,74 @@ class CategoryController extends Controller
             $category->save();
 
             event(new DataUpdated('category'));
-            return redirect()->back()->with('success', 'Kategori berhasil ditambahkan!');
+            return redirect()->back()->with('success', 'Kategori Berhasil Ditambahkan!');
         } catch (\Exception $e) {
             return redirect()->back()->withErrors(['msg' => 'Gagal simpan: ' . $e->getMessage()]);
         }
     }
-
-    public function edit(Category $category)
+    public function update(Request $request, $id)
     {
-        return view('categories.edit', compact('category'));
-    }
-
-    public function update(Request $request, Category $category)
-    {
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
-        ]);
-
-        $data = $request->all();
-
-        if ($request->hasFile('image')) {
-            if ($category->image) {
-                Storage::disk('public')->delete($category->image);
+        try{
+            $request->validate([
+                'name' => 'required|string|max:255|unique:categories,name,'.$id,
+                'image' => 'nullable|file|mimes:jpeg,png,jpg,gif,svg|max:2048',
+            ]);
+    
+            $category = \App\Models\Category::findOrFail($id);
+            $category->name = $request->name;
+    
+            if ($request->hasFile('image')) {
+                // Hapus file lama jika perlu
+                if ($category->image && file_exists(public_path($category->image))) {
+                    unlink(public_path($category->image));
+                }
+    
+                $file = $request->file('image');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/categories'), $filename);
+                $category->image = 'uploads/categories/' . $filename;
             }
-            $path = $request->file('image')->store('categories', 'public');
-            $data['image'] = $path;
-            $data['image_url'] = Storage::url($path);
+    
+            $category->save();
+            event(new DataUpdated('category'));
+            return redirect()->back()->with('success', 'Kategori berhasil diupdate!');
+        }catch (\Exception $e) {
+            return redirect()->back()->withErrors(['msg' => 'Gagal: ' . $e->getMessage()]);
         }
-
-        $category->update($data);
-        return redirect()->route('categories.index')->with('success', 'Category updated successfully');
     }
 
-    public function destroy(Category $category)
+    public function destroy($id)
     {
-        if ($category->image) {
-            Storage::disk('public')->delete($category->image);
+        try {
+            $category = Category::with('subCategories.menus')->findOrFail($id);
+    
+            // 1. Hapus gambar fisik Kategori Utama
+            if ($category->image && file_exists(public_path($category->image))) {
+                unlink(public_path($category->image));
+            }
+    
+            // 2. Loop melalui Sub-Kategori untuk hapus gambar Menu
+            foreach ($category->subCategories as $sub) {
+                foreach ($sub->menus as $menu) {
+                    if ($menu->image && file_exists(public_path($menu->image))) {
+                        unlink(public_path($menu->image));
+                    }
+                }
+                // Hapus data Menu di sub ini
+                $sub->menus()->delete();
+            }
+    
+            // 3. Hapus semua Sub-Kategori
+            $category->subCategories()->delete();
+    
+            // 4. Hapus Kategori Utama
+            $category->delete();
+    
+            event(new DataUpdated('category'));
+            
+            return redirect()->back()->with('success', 'Kategori dan seluruh data di dalamnya berhasil dihapus!');
+        }catch (\Exception $e) {
+            return redirect()->back()->withErrors(['msg' => 'Gagal: ' . $e->getMessage()]);
         }
-        $category->delete();
-        return redirect()->route('categories.index')->with('success', 'Category deleted successfully');
     }
 }
