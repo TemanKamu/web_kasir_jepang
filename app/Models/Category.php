@@ -9,12 +9,13 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class Category extends Model
 {
     use HasFactory;
-
+    // protected $table = 'categor';
     protected $fillable = [
         'name',
     ];
+    
     public function subCategories()
     {
-        return $this->hasMany(SubCategories::class);
+        return $this->hasMany(SubCategories::class, 'category_id');
     }
 }

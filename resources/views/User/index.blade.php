@@ -1,53 +1,261 @@
-@extends('template')
-
-@if (Auth::check() && Auth::user()->role_id == 1)
- @section('nav-position', 'flex-1 ml-10')    
- @section('navigation-items')
-     <div class="flex gap-2">
-         <div class="flex flex-col items-center justify-center w-24 h-14 bg-[#3EA1DC] text-white rounded-xl shadow-sm cursor-pointer">
-             <i class="fas fa-th-large text-xl"></i>
-             <span class="text-[10px] font-bold mt-1 uppercase">Dashboard</span>
-         </div>
-         <div class="flex flex-col items-center justify-center w-24 h-14 bg-white text-gray-800 border rounded-xl cursor-pointer">
-             <i class="fas fa-receipt text-xl"></i>
-             <span class="text-[10px] font-bold mt-1 uppercase">Bill</span>
-         </div>
-         <div class="flex flex-col items-center justify-center w-24 h-14 bg-white text-gray-800 border rounded-xl cursor-pointer">
-             <i class="fas fa-user text-xl"></i>
-             <span class="text-[10px] font-bold mt-1 uppercase">User</span>
-         </div>
-     </div>
-@endsection
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kaisei POS - Full Layout</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        [x-cloak] { display: none !important; }
+    </style>
+</head>
+<body class="bg-[#f0f4f8] font-sans text-gray-800" x-data="{
+        openAdd: false,
+        openDetail: false,
+        selectedMenu: {},
+    }">
     
-@endif
-@section('content')
-    @foreach($products as $product)
-    <div class="bg-white p-4 rounded-2xl shadow-sm text-center relative">
-        <img src="{{ asset('storage/'.$product->image) }}" class="w-24 h-24 mx-auto mb-3 rounded-full object-cover">
-        <h3 class="font-bold text-blue-900">{{ $product->name }}</h3>
-        <p class="text-xs text-gray-500">Rp. {{ number_format($product->price, 0, ',', '.') }}</p>
-    </div>
-    @endforeach
-    @if (Auth::User()->role_id == 1)
-        <div class="border-2 border-dashed border-gray-300 rounded-2xl flex items-center justify-center cursor-pointer hover:bg-gray-100">
-            <i class="fas fa-plus text-4xl text-gray-400"></i>
-        </div>
-    @endif
-@endsection
+     {{-- Modal Detail Menu --}}
+    <div x-show="openDetail" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div @click.away="openDetail = false" class="bg-white w-full max-w-md rounded-[3rem] overflow-hidden shadow-2xl relative">
+            
+            <button @click="openDetail = false" class="absolute top-6 right-6 z-[110] bg-white/80 backdrop-blur-md w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
 
-@section('order-items')
-    <div class="bg-[#f3f4f6] rounded-2xl p-4 flex items-center gap-4 border border-transparent hover:border-blue-100 transition-all">
-        <div class="w-16 h-16 bg-white rounded-xl overflow-hidden flex-shrink-0 border border-gray-100">
-            <img src="/path-to-shoyu.png" class="w-full h-full object-cover">
-        </div>
-        <div class="flex-1">
-            <h4 class="font-bold text-[#1e3a8a] text-sm">Shoyu Ramen</h4>
-            <p class="text-xs text-gray-400 font-semibold">Rp. 15.000</p>
-        </div>
-        <div class="flex items-center gap-3 bg-white px-3 py-1.5 rounded-xl shadow-sm border border-gray-50">
-            <button class="text-blue-400 font-bold text-sm">-</button>
-            <span class="text-sm font-bold text-gray-800">1</span>
-            <button class="text-blue-400 font-bold text-sm">+</button>
+            <div class="h-72 bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                <template x-if="selectedMenu.image_url">
+                    <img :src="selectedMenu.image_url" class="w-full h-full object-cover shadow-inner">
+                </template>
+                
+                <template x-if="!selectedMenu.image_url">
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-bowl-rice text-8xl text-gray-200"></i>
+                        <span class="text-gray-300 font-bold mt-2">No Image</span>
+                    </div>
+                </template>
+                
+                <template x-if="selectedMenu.status !== 'available'">
+                    <div class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                        <div class="bg-red-600 text-white px-8 py-2 rounded-full font-black tracking-[0.2em] uppercase shadow-2xl transform -rotate-3 border-2 border-white">
+                            HABIS
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="p-8">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1">
+                        <h2 class="text-3xl font-black text-[#1e3a8a] leading-tight" x-text="selectedMenu.name"></h2>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-blue-500 font-bold text-xs bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest" 
+                                x-text="selectedMenu.sub_category ? selectedMenu.sub_category.name : 'Menu'">
+                            </span>
+                            <span :class="selectedMenu.status === 'available' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'" 
+                                class="font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-tighter"
+                                x-text="selectedMenu.status === 'available' ? 'Available' : 'Sold Out'">
+                            </span>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-black text-blue-600" 
+                    x-text="selectedMenu.price ? 'Rp' + parseInt(selectedMenu.price).toLocaleString('id-ID') : 'Rp0'">
+                    </p>
+                </div>
+
+                <p class="text-gray-500 leading-relaxed mb-8 font-medium italic" x-text="selectedMenu.desc || 'No description available for this delicious menu.'"></p>
+
+                <div class="space-y-3">
+                    <button x-show="selectedMenu.status === 'available'"
+                            @click="openDetail = false; /* Logic keranjang */" 
+                            class="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase">
+                        <i class="fas fa-cart-plus"></i> Tambah Pesanan
+                    </button>
+                </div>
+            </div>
         </div>
     </div>
-@endsection
+    <div class="flex h-screen flex-col overflow-hidden">
+        
+        <header class="bg-white border-b px-6 py-2 flex items-center justify-between h-20 shadow-sm z-10">
+            <div class="flex items-center gap-3 w-56">
+                <div class="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                    <i class="fas fa-torii-gate text-2xl"></i>
+                </div>
+                <h1 class="text-3xl font-bold text-[#4a90e2] tracking-tight">Kaisei</h1>
+            </div>
+
+        </header>
+
+        <div class="flex flex-1 overflow-hidden">
+            {{-- Sidebar Categories --}}
+            <aside class="w-64 bg-white border-r flex flex-col p-5 overflow-y-auto">
+                @foreach($groupedCategories as $category)
+                    <div class="mb-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xs font-black text-[#1e3a8a] uppercase flex items-center gap-2 cursor-pointer" @click="document.getElementById('{{ $category->name }}').scrollIntoView({ behavior: 'smooth' })">
+                                <img src="{{ asset($category->image) }}" alt="img" class="w-5 h-5 object-contain">
+                                {{ $category->name }}
+                            </h3>
+
+                        </div>
+
+                        <ul class="space-y-1 text-sm font-semibold text-gray-500">
+                            @foreach($category->subCategories as $sub)
+                                <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer transition-all hover:text-[#3b82f6]" @click="document.getElementById('{{ Str::slug($sub->name) }}').scrollIntoView({ behavior: 'smooth' })">
+                                    {{ $sub->name }}
+                                    {{-- Dot indikator kalau mau --}}
+                                    <span class="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-[#3b82f6]"></span>
+                                </li>
+                            @endforeach
+                        </ul>
+
+                        {{-- Tombol tambah sub-kategori spesifik per kategori utama --}}
+                       
+                    </div>
+                @endforeach
+
+               
+            </aside>
+
+            {{-- Main --}}
+            <main class="flex-1 bg-[#fcfdfe] p-8 overflow-y-auto">
+                <div class="mb-10">
+                    <div class="relative w-full">
+                        <span class="absolute inset-y-0 left-0 flex items-center pl-5">
+                            <i class="fas fa-search text-gray-300 text-lg"></i>
+                        </span>
+                        <input type="text" class="w-full pl-14 pr-6 py-4 bg-white border border-gray-100 shadow-sm rounded-3xl focus:outline-none focus:ring-2 focus:ring-blue-100 transition-all text-gray-600" placeholder="Search">
+                    </div>
+                </div>
+                
+                @foreach($groupedCategories as $mainCategory)
+                    <div class="mt-10">
+                        <h1 class="text-4xl font-black text-[#1e3a8a] mb-6 uppercase border-b-4 border-blue-500 inline-block" id={{ $mainCategory->name }}>
+                            {{ $mainCategory->name }}
+                        </h1>
+
+                        @foreach($mainCategory->subCategories as $sub)
+                            @if($sub->menus->count() > 0)
+                                {{-- CARI NILAI COUNT_SOLD TERTINGGI DI SUB KATEGORI INI --}}
+                                @php
+                                    $maxSold = $sub->menus->max('count_sold');
+                                @endphp
+
+                                <div class="mt-8 mb-4 flex items-center gap-3" id="{{ Str::slug($sub->name) }}">
+                                    <h2 class="text-2xl font-bold text-gray-700 uppercase">{{ $sub->name }}</h2>
+                                    <div class="h-[2px] flex-1 bg-gray-100"></div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                    @foreach($sub->menus as $menu)
+                                        @php 
+                                            $menuData = $menu->toArray();
+                                            $menuData['sub_category'] = $sub; 
+                                        @endphp
+
+                                        <div @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
+                                            class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
+                                            
+                                            {{-- BADGE BEST SELLER OTOMATIS --}}
+                                            {{-- Muncul jika count_sold menu ini sama dengan nilai tertinggi DAN bukan 0 --}}
+                                            @if($menu->count_sold > 0 && $menu->count_sold == $maxSold)
+                                                <div class="absolute top-5 left-0 z-10">
+                                                    <div class="bg-amber-400 text-[#1e3a8a] text-[10px] font-black px-3 py-1 rounded-r-full shadow-md flex items-center gap-1 uppercase tracking-tighter">
+                                                        <i class="fas fa-fire text-[8px]"></i>
+                                                        Best Seller
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            {{-- GAMBAR --}}
+                                            <div class="w-32 h-32 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden relative">
+                                                @if($menu->image_url)
+                                                    <img src="{{ $menu->image_url }}" 
+                                                        class="w-full h-full object-cover transition-all duration-300"
+                                                        :class="'{{ $menu->status }}' !== 'available' ? 'grayscale opacity-40' : 'group-hover:scale-110'">
+                                                @else
+                                                    <i class="fas fa-utensils text-4xl text-gray-300"></i>
+                                                @endif
+
+                                                @if($menu->status !== 'available')
+                                                    <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                                        <span class="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg uppercase -rotate-12 border border-white">
+                                                            Sold Out
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            </div>
+
+                                            {{-- TEXT SECTION --}}
+                                            <div class="text-center">
+                                                <h3 class="font-black text-lg text-[#1e3a8a] leading-tight">{{ $menu->name }}</h3>
+                                                <p class="text-sm font-bold text-gray-400 mt-2">Rp. {{ number_format($menu->price, 0, ',', '.') }}</p>
+                                                
+                                                @if($menu->status !== 'available')
+                                                    <div class="mt-2">
+                                                        <span class="text-[8px] font-black text-red-500 bg-red-50 px-3 py-1 rounded-full uppercase tracking-tighter">
+                                                            Stok Habis
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        @endforeach
+                    </div>
+                @endforeach
+            </main>
+
+            {{-- Sidebar Order Bemu --}}
+            <aside class="w-[420px] bg-white border-l flex flex-col h-full shadow-2xl z-10">
+                <div class="p-7 flex justify-between items-start">
+                    <div class="flex gap-4">
+                        <div class="w-14 h-14 bg-[#3b82f6] rounded-[1.2rem] flex items-center justify-center shadow-lg shadow-blue-100">
+                            <i class="fas fa-clipboard-list text-white text-2xl"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-2xl font-black text-[#1e3a8a]">Order Menu</h2>
+                            <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Order No. 164</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="mt-auto p-8">
+                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center">
+                        <div class="text-white">
+                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">Total Items (1)</p>
+                            <p class="text-3xl font-black">Rp. 15.000</p>
+                        </div>
+                        <button class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl">Order</button>
+                    </div>
+                </div>
+            </aside>
+        </div>
+    </div>
+    <script type="module">
+        // Gunakan pengecekan berkala sampai window.Echo tersedia
+        const initEcho = () => {
+            if (window.Echo) {
+                window.Echo.channel('pos-data-channel')
+                    .listen('.data.changed', (e) => {
+                        console.log('Update detected:', e.type);
+                        window.location.reload();
+                    });
+            } else {
+                // Cek lagi setelah 500ms jika belum siap
+                setTimeout(initEcho, 500);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', initEcho);
+    </script>
+</body>
+</html>

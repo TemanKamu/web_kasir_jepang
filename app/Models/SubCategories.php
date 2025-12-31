@@ -19,6 +19,6 @@ class SubCategories extends Model
 
     public function menus()
     {
-        return $this->hasMany(Menu::class);
+        return $this->hasMany(Menu::class, 'sub_category_id');
     }
 }

@@ -1,7 +1,8 @@
 import { defineConfig } from 'vite';
 import laravel from 'laravel-vite-plugin';
 import tailwindcss from '@tailwindcss/vite';
-
+// import './bootstrap'; // Ini biasanya berisi axios
+// import './echo';      // <--- WAJIB ADA INI
 export default defineConfig({
     plugins: [
         laravel({

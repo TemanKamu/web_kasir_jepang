@@ -2,7 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Model\Category;
+use App\Events\DataUpdated;
+use App\Models\Category;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 
@@ -22,20 +23,29 @@ class CategoryController extends Controller
     public function store(Request $request)
     {
         $request->validate([
-            'name' => 'required|string|max:255',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048'
+            'name' => 'required|string|max:255|unique:categories,name',
+            'image' => 'required|file|mimes:jpeg,png,jpg,gif,svg|max:2048',
         ]);
 
-        $data = $request->all();
+        try {
+            $category = new \App\Models\Category();
+            $category->name = $request->name;
 
-        if ($request->hasFile('image')) {
-            $path = $request->file('image')->store('categories', 'public');
-            $data['image'] = $path;
-            $data['image_url'] = Storage::url($path);
+            if ($request->hasFile('image')) {
+                $file = $request->file('image');
+                $filename = time() . '_' . $file->getClientOriginalName();
+                $file->move(public_path('uploads/categories'), $filename);
+                $category->image = 'uploads/categories/' . $filename;
+            }
+
+            
+            $category->save();
+
+            event(new DataUpdated('category'));
+            return redirect()->back()->with('success', 'Kategori berhasil ditambahkan!');
+        } catch (\Exception $e) {
+            return redirect()->back()->withErrors(['msg' => 'Gagal simpan: ' . $e->getMessage()]);
         }
-
-        Category::create($data);
-        return redirect()->route('categories.index')->with('success', 'Category created successfully');
     }
 
     public function edit(Category $category)

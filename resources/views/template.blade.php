@@ -122,5 +122,28 @@
             </aside>
         </div>
     </div>
+    <script>
+        // Tambahkan di dalam script lu
+        function submitForm(event) {
+            const formData = new FormData(event.target);
+            
+            fetch(event.target.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    this.openAdd = false; // Tutup popup
+                    event.target.reset(); // Reset form
+                    this.imagePreview = null; // Reset preview gambar
+                    // Flash message atau notif sukses di sini
+                }
+            })
+            .catch(error => console.error('Error:', error));
+        }
+    </script>
 </body>
 </html>

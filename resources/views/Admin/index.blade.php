@@ -2,19 +2,444 @@
 <html lang="id">
 <head>
     <meta charset="UTF-8">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Kaisei POS - Full Layout</title>
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
     <style>
-        /* Custom scrollbar agar lebih rapi */
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        [x-cloak] { display: none !important; }
+        
     </style>
 </head>
-<body class="bg-[#f0f4f8] font-sans text-gray-800">
+<body class="bg-[#f0f4f8] font-sans text-gray-800"
+  x-data="{ 
+    openAdd: false, 
+    openDetail: false, 
+    openEdit: false,
+    openAddCategory: false, 
+    openAddSub: false, 
+    selectedMenu: {}, 
+    editData: {},
 
+    // Helper untuk ambil CSRF secara aman
+    getCsrf() {
+        const tag = document.querySelector('meta[name=csrf-token]');
+        return tag ? tag.getAttribute('content') : '';
+    },
+
+    async toggleStatus(id) {
+        try {
+            const response = await fetch(`/menus/${id}/toggle-status`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': this.getCsrf(),
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data.success) {
+                this.selectedMenu.status = data.new_status;
+                console.log('Status updated to: ' + data.new_status);
+            } else {
+                // Ini akan menangkap error 500 dan menampilkan pesan dari Laravel
+                throw new Error(data.message || 'Server Error 500');
+            }
+        } catch (error) {
+            console.error('Error:', error);
+            alert('Gagal update status: ' + error.message);
+        }
+    },
+
+    openEditMenu(menu) {
+        this.openDetail = false;
+        this.editData = { ...menu }; 
+        this.openEdit = true;
+    },
+
+    async submitUpdate(event) {
+        const formData = new FormData(event.target);
+        formData.append('_method', 'PUT');
+
+        try {
+            const response = await fetch(`/menus/${this.editData.id}`, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRF-TOKEN': this.getCsrf()
+                }
+            });
+
+            if (response.ok) {
+                this.openEdit = false;
+                window.location.reload(); 
+            } else {
+                alert('Gagal update data');
+            }
+        } catch (error) {
+            console.error(error);
+        }
+    },
+
+    async confirmDelete(id) {
+        if (!confirm('Yakin mau hapus menu ini?')) return;
+
+        try {
+            const response = await fetch(`/menus/${id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': this.getCsrf()
+                }
+            });
+            const data = await response.json();
+            if (data.success) window.location.reload();
+        } catch (error) {
+            console.error(error);
+        }
+    }
+}"
+ @close-modal-add.window="openAdd = false">
+    {{-- Pop up Section --}}
+    <div x-show="openAdd" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <form action="{{ route('menus.store') }}" method="POST" enctype="multipart/form-data" 
+            @submit.prevent="submitForm($event)"
+            class="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl transition-all"
+            x-data="{ 
+                imagePreview: null,
+                handleFile(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.imagePreview = URL.createObjectURL(file);
+                    }
+                },
+                async submitForm(event) {
+                    const formData = new FormData(event.target);
+                    
+                    try {
+                        const response = await fetch(event.target.action, {
+                            method: 'POST',
+                            body: formData,
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+                            }
+                        });
+
+                        if (response.ok) {
+                            window.dispatchEvent(new CustomEvent('close-modal-add'));
+                            event.target.reset();
+                            this.imagePreview = null;
+                            console.log('Menu berhasil disimpan');
+                        } else {
+                            const errorData = await response.json();
+                            alert('Gagal simpan: ' + JSON.stringify(errorData.errors));
+                        }
+                    } catch (error) {
+                        console.error('Error:', error);
+                    }
+                }
+            }"
+            @submit.prevent="submitForm($event)">
+            @csrf
+            <h2 class="text-3xl font-black text-[#1e3a8a] text-center mb-8 uppercase tracking-tight">Tambah Menu Baru</h2>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Nama Menu</label>
+                    <input type="text" name="name" required placeholder="Contoh: Shoyu Ramen" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold">
+                </div>
+
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Kategori</label>
+                        <select name="sub_category_id" required class="...">
+                            <option value="">Pilih Sub-Kategori</option>
+                            @foreach($groupedCategories as $main)
+                                <optgroup label="{{ $main->name }}">
+                                    @foreach($main->subCategories as $sub)
+                                        <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                    @endforeach
+                                </optgroup>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Harga (Rp)</label>
+                        <input type="number" name="price" required placeholder="15000" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Deskripsi</label>
+                    <textarea name="desc" rows="2" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold" placeholder="Jelaskan menu lu..."></textarea>
+                </div>
+
+                <input type="hidden" name="status" value="available">
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Foto Menu</label>
+                    <div class="relative border-2 border-dashed border-gray-200 rounded-3xl p-4 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors group h-40 overflow-hidden">
+                        <template x-if="!imagePreview">
+                            <div class="flex flex-col items-center">
+                                <i class="fas fa-plus-circle text-4xl mb-2 group-hover:text-blue-500"></i>
+                                <span class="font-bold">Klik untuk Upload</span>
+                            </div>
+                        </template>
+                        
+                        <template x-if="imagePreview">
+                            <img :src="imagePreview" class="absolute inset-0 w-full h-full object-cover rounded-3xl">
+                        </template>
+
+                        <input type="file" name="image" class="absolute inset-0 opacity-0 cursor-pointer" @change="handleFile($event)" accept="image/*">
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-10">
+                <button type="button" @click="openAdd = false" class="py-4 border-2 border-blue-500 text-blue-500 rounded-2xl font-black uppercase hover:bg-blue-50 transition-colors">Batal</button>
+                <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-colors">Simpan Menu</button>
+            </div>
+        </form>
+    </div>
+    <div x-show="openAddCategory" x-cloak class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <form action="{{ route('categories.store') }}" method="POST" enctype="multipart/form-data" 
+            class="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl transition-all"
+            x-data="{ 
+                imagePreviewCategory: null
+            }">
+            @csrf
+            <h2 class="text-3xl font-black text-[#1e3a8a] text-center mb-8 uppercase tracking-tight">Kategori Baru</h2>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Nama Kategori</label>
+                    <input type="text" name="name" required placeholder="Misal: Makanan, Minuman" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Icon Kategori</label>
+                    <div class="relative border-2 border-dashed border-gray-200 rounded-3xl p-6 flex flex-col items-center justify-center text-gray-400 hover:bg-gray-50 cursor-pointer transition-colors group min-h-[160px]">
+                        
+                        <template x-if="!imagePreviewCategory">
+                            <div class="text-center">
+                                <i class="fas fa-image text-3xl mb-2 group-hover:text-blue-500"></i>
+                                <p class="font-bold text-xs uppercase">Upload Icon</p>
+                            </div>
+                        </template>
+
+                        <template x-if="imagePreviewCategory">
+                            <div class="relative w-full h-full flex flex-col items-center">
+                                <img :src="imagePreviewCategory" class="w-20 h-20 object-contain rounded-xl mb-2 shadow-md">
+                                <p class="text-[10px] font-black text-blue-500 uppercase">Ganti Gambar</p>
+                            </div>
+                        </template>
+
+                        {{-- Tambahkan x-ref="imageInput" di sini --}}
+                        <input type="file" name="image" x-ref="imageInput" class="absolute inset-0 opacity-0 cursor-pointer"
+                            @change="
+                                const file = $event.target.files[0];
+                                if (file) {
+                                    const reader = new FileReader();
+                                    reader.onload = (e) => { imagePreviewCategory = e.target.result; };
+                                    reader.readAsDataURL(file);
+                                }
+                            ">
+                    </div>
+                </div>
+            </div>
+            @if ($errors->any())
+                <div class="mt-4 p-4 bg-red-50 border-l-4 border-red-500 rounded-xl">
+                    <ul class="list-disc list-inside text-sm text-red-600 font-bold">
+                        @foreach ($errors->all() as $error)
+                            <li>{{ $error }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+            <div class="grid grid-cols-2 gap-4 mt-10">
+                {{-- Tambahkan logic reset input file di tombol Batal --}}
+                <button type="button" 
+                    @click="
+                        openAddCategory = false; 
+                        imagePreviewCategory = null; 
+                        $refs.imageInput.value = ''; 
+                    " 
+                    class="py-4 border-2 border-blue-500 text-blue-500 rounded-2xl font-black uppercase hover:bg-blue-50 transition-colors text-sm">
+                    Batal
+                </button>
+                <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-colors text-sm">Simpan</button>
+            </div>
+        </form>
+    </div>
+    <div x-show="openAddSub" x-cloak class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <form action="{{ route('sub-categories.store') }}" method="POST"
+            class="bg-white w-full max-w-md rounded-[3rem] p-10 shadow-2xl transition-all">
+            @csrf
+            <h2 class="text-3xl font-black text-[#1e3a8a] text-center mb-8 uppercase tracking-tight">Sub-Kategori</h2>
+            
+            <div class="space-y-6">
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Kategori Utama</label>
+                    <select name="category_id" required class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold appearance-none">
+                        <option value="">Pilih Kategori Utama</option>
+                        @foreach($groupedCategories as $cat)
+                            <option value="{{ $cat->id }}">{{ $cat->name }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-gray-400 mb-2 ml-2 uppercase">Nama Sub-Kategori</label>
+                    <input type="text" name="name" required placeholder="Misal: Ramen, Coffee, Sushi" class="w-full px-6 py-4 bg-gray-50 border border-gray-100 rounded-2xl focus:outline-none focus:ring-2 focus:ring-blue-100 font-semibold">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mt-10">
+                <button type="button" @click="openAddSub = false" class="py-4 border-2 border-blue-500 text-blue-500 rounded-2xl font-black uppercase hover:bg-blue-50 transition-colors text-sm">Batal</button>
+                <button type="submit" class="py-4 bg-[#3b82f6] text-white rounded-2xl font-black uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-colors text-sm">Simpan</button>
+            </div>
+        </form>
+    </div>
+    <div x-show="openEdit" x-cloak class="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <form @submit.prevent="submitUpdate($event)" 
+            class="bg-white w-full max-w-lg rounded-[3rem] p-10 shadow-2xl transition-all"
+            enctype="multipart/form-data">
+            
+            <h2 class="text-3xl font-black text-blue-600 mb-6 text-center">UPDATE MENU</h2>
+
+            <div class="space-y-4">
+                <input type="text" name="name" x-model="editData.name" placeholder="Nama Menu" 
+                    class="w-full px-6 py-4 rounded-2xl bg-gray-100 border-none focus:ring-2 focus:ring-blue-500">
+
+                <div class="flex gap-4">
+                    <select name="sub_category_id" x-model="editData.sub_category_id" 
+                            class="flex-1 px-6 py-4 rounded-2xl bg-gray-100 border-none">
+                        @foreach($groupedCategories as $category)
+                            <optgroup label="{{ $category->name }}">
+                                @foreach($category->subCategories as $sub)
+                                    <option value="{{ $sub->id }}">{{ $sub->name }}</option>
+                                @endforeach
+                            </optgroup>
+                        @endforeach
+                    </select>
+
+                    <input type="number" name="price" x-model="editData.price" placeholder="Harga" 
+                        class="w-80 px-6 py-4 rounded-2xl bg-gray-100 border-none">
+                </div>
+
+                <textarea name="desc" x-model="editData.desc" placeholder="Deskripsi menu..." 
+                        class="w-full px-6 py-4 rounded-2xl bg-gray-100 border-none h-32"></textarea>
+
+                <div class="flex items-center gap-4">
+                    <img :src="editData.image_url" class="w-20 h-20 rounded-2xl object-cover bg-gray-200">
+                    <input type="file" name="image" @change="handleEditFile($event)" 
+                        class="text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+            </div>
+
+            <div class="flex gap-4 mt-8">
+                <button type="button" @click="openEdit = false" class="flex-1 py-4 font-bold text-gray-400">BATAL</button>
+                <button type="submit" class="flex-1 bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-blue-200">SIMPAN PERUBAHAN</button>
+            </div>
+        </form>
+    </div>
+    <div x-show="openDetail" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+        <div @click.away="openDetail = false" class="bg-white w-full max-w-md rounded-[3rem] overflow-hidden shadow-2xl relative">
+            
+            <button @click="openDetail = false" class="absolute top-6 right-6 z-[110] bg-white/80 backdrop-blur-md w-10 h-10 rounded-full flex items-center justify-center text-gray-400 hover:text-red-500 shadow-sm transition-colors">
+                <i class="fas fa-times"></i>
+            </button>
+
+            <div class="h-72 bg-gray-100 flex items-center justify-center relative overflow-hidden">
+                <template x-if="selectedMenu.image_url">
+                    <img :src="selectedMenu.image_url" class="w-full h-full object-cover shadow-inner">
+                </template>
+                
+                <template x-if="!selectedMenu.image_url">
+                    <div class="flex flex-col items-center">
+                        <i class="fas fa-bowl-rice text-8xl text-gray-200"></i>
+                        <span class="text-gray-300 font-bold mt-2">No Image</span>
+                    </div>
+                </template>
+                
+                <template x-if="selectedMenu.status !== 'available'">
+                    <div class="absolute inset-0 bg-black/60 flex flex-col items-center justify-center">
+                        <div class="bg-red-600 text-white px-8 py-2 rounded-full font-black tracking-[0.2em] uppercase shadow-2xl transform -rotate-3 border-2 border-white">
+                            HABIS
+                        </div>
+                    </div>
+                </template>
+            </div>
+
+            <div class="p-8">
+                <div class="flex justify-between items-start mb-4">
+                    <div class="flex-1">
+                        <h2 class="text-3xl font-black text-[#1e3a8a] leading-tight" x-text="selectedMenu.name"></h2>
+                        <div class="flex items-center gap-2 mt-1">
+                            <span class="text-blue-500 font-bold text-xs bg-blue-50 px-3 py-1 rounded-full uppercase tracking-widest" 
+                                x-text="selectedMenu.sub_category ? selectedMenu.sub_category.name : 'Menu'">
+                            </span>
+
+                            <span :class="selectedMenu.status === 'available' ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'" 
+                                class="font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-tighter"
+                                x-text="selectedMenu.status === 'available' ? 'Available' : 'Sold Out'">
+                            </span>
+
+                            <template x-if="selectedMenu.count_sold > 0">
+                                <div class="flex items-center gap-1 bg-amber-100 text-amber-600 font-black text-[10px] px-3 py-1 rounded-full uppercase tracking-tighter border border-amber-200">
+                                    <i class="fas fa-crown text-[8px]"></i>
+                                    <span x-text="'Terjual ' + selectedMenu.count_sold"></span>
+                                </div>
+                            </template>
+                        </div>
+                    </div>
+                    <p class="text-2xl font-black text-blue-600" 
+                    x-text="selectedMenu.price ? 'Rp' + parseInt(selectedMenu.price).toLocaleString('id-ID') : 'Rp0'">
+                    </p>
+                </div>
+
+                <p class="text-gray-500 leading-relaxed mb-8 font-medium italic" x-text="selectedMenu.desc || 'No description available for this delicious menu.'"></p>
+
+                <div class="space-y-3">
+                    <button x-show="selectedMenu.status === 'available'"
+                            @click="openDetail = false; /* Logic keranjang */" 
+                            class="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase">
+                        <i class="fas fa-cart-plus"></i> Tambah Pesanan
+                    </button>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <button @click="openEditMenu(selectedMenu)"
+                                class="bg-amber-400 hover:bg-amber-500 text-white py-4 rounded-2xl font-black text-xs transition-all shadow-lg flex items-center justify-center gap-2 uppercase">
+                            <i class="fa-solid fa-pen-to-square"></i> Edit
+                        </button>
+                        <button @click="confirmDelete(selectedMenu.id)"  
+                                class="bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-black text-xs transition-all shadow-lg flex items-center justify-center gap-2 uppercase">
+                            <i class="fa-solid fa-trash"></i> Hapus
+                        </button>
+                    </div>
+
+                    <button @click="toggleStatus(selectedMenu.id)" 
+                            :class="selectedMenu.status === 'available' ? 'border-2 border-red-500 text-red-500' : 'bg-green-500 text-white'"
+                            class="w-full py-4 rounded-2xl font-black text-xs flex items-center justify-center gap-2 transition-all uppercase tracking-widest">
+                        <i class="fa-solid" :class="selectedMenu.status === 'available' ? 'fa-ban' : 'fa-check-circle'"></i>
+                        <span x-text="selectedMenu.status === 'available' ? 'Tandai Stok Habis' : 'Aktifkan Menu'"></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    {{-- End Pop up Section --}}
+    
     <div class="flex h-screen flex-col overflow-hidden">
         
         <header class="bg-white border-b px-6 py-2 flex items-center justify-between h-20 shadow-sm z-10">
@@ -42,56 +467,43 @@
         </header>
 
         <div class="flex flex-1 overflow-hidden">
-            
+            {{-- Sidebar Categories --}}
             <aside class="w-64 bg-white border-r flex flex-col p-5 overflow-y-auto">
-                <div class="mb-8">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-xs font-black text-[#1e3a8a] uppercase flex items-center gap-2">
-                            <i class="fas fa-utensils"></i> Makanan
-                        </h3>
-                        <button class="text-gray-300 hover:text-blue-500"><i class="fas fa-edit text-xs"></i></button>
-                    </div>
-                    <ul class="space-y-1 text-sm font-semibold text-gray-500">
-                        <li class="bg-[#e2f0ff] text-[#3b82f6] p-3 rounded-xl flex justify-between items-center group">
-                             Ramen 
-                        </li>
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer">
-                            Rice Bowl 
-                        </li>
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer">
-                            Sushi 
-                        </li>
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer text-gray-400">
-                            Snack & Dessert
-                        </li>
-                    </ul>
-                    <button class="mt-4 w-full py-2.5 border-2 border-gray-100 rounded-xl text-[11px] font-bold text-gray-400 hover:bg-gray-50 uppercase tracking-wider">
-                        <i class="fas fa-plus mr-1"></i> Sub-Kategori
-                    </button>
-                </div>
+                @foreach($groupedCategories as $category)
+                    <div class="mb-8">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xs font-black text-[#1e3a8a] uppercase flex items-center gap-2 cursor-pointer" @click="document.getElementById('{{ $category->name }}').scrollIntoView({ behavior: 'smooth' })">
+                                <img src="{{ asset($category->image) }}" alt="img" class="w-5 h-5 object-contain">
+                                {{ $category->name }}
+                            </h3>
+                            <button class="text-gray-300 hover:text-blue-500 transition-colors">
+                                <i class="fas fa-edit text-xs"></i>
+                            </button>
+                        </div>
 
-                <div class="mb-8">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-xs font-black text-[#1e3a8a] uppercase flex items-center gap-2">
-                            <i class="fas fa-coffee"></i> Minuman
-                        </h3>
-                        <button class="text-gray-300 hover:text-blue-500"><i class="fas fa-edit text-xs"></i></button>
-                    </div>
-                    <ul class="space-y-1 text-sm font-semibold text-gray-500">
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer">Tea</li>
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer">Coffee</li>
-                        <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer">Milk</li>
-                    </ul>
-                    <button class="mt-4 w-full py-2.5 border-2 border-gray-100 rounded-xl text-[11px] font-bold text-gray-400 hover:bg-gray-50 uppercase tracking-wider">
-                        <i class="fas fa-plus mr-1"></i> Sub-Kategori
-                    </button>
-                </div>
+                        <ul class="space-y-1 text-sm font-semibold text-gray-500">
+                            @foreach($category->subCategories as $sub)
+                                <li class="p-3 hover:bg-gray-50 rounded-xl flex justify-between items-center group cursor-pointer transition-all hover:text-[#3b82f6]" @click="document.getElementById('{{ Str::slug($sub->name) }}').scrollIntoView({ behavior: 'smooth' })">
+                                    {{ $sub->name }}
+                                    {{-- Dot indikator kalau mau --}}
+                                    <span class="w-1.5 h-1.5 rounded-full bg-transparent group-hover:bg-[#3b82f6]"></span>
+                                </li>
+                            @endforeach
+                        </ul>
 
-                <button class="mt-auto w-full py-4 bg-[#3b82f6] text-white rounded-2xl font-bold uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-colors">
+                        {{-- Tombol tambah sub-kategori spesifik per kategori utama --}}
+                        <button @click="openAddSub = true" class="mt-4 w-full py-2.5 border-2 border-gray-100 rounded-xl text-[11px] font-bold text-gray-400 hover:bg-gray-50 uppercase tracking-wider transition-all">
+                            <i class="fas fa-plus mr-1"></i> Sub-Kategori
+                        </button>
+                    </div>
+                @endforeach
+
+                <button @click="openAddCategory = true" class="mt-auto w-full py-4 bg-[#3b82f6] text-white rounded-2xl font-bold uppercase shadow-lg shadow-blue-100 hover:bg-blue-600 transition-all active:scale-95">
                     <i class="fas fa-plus mr-2"></i> Kategori
                 </button>
             </aside>
 
+            {{-- Main --}}
             <main class="flex-1 bg-[#fcfdfe] p-8 overflow-y-auto">
                 <div class="mb-10">
                     <div class="relative w-full">
@@ -103,43 +515,91 @@
                 </div>
                 
                 <div class="mb-8">
-                    <div class="w-full border-2 border-dashed border-gray-200 rounded-[2.5rem] py-10 flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-blue-200 transition-all text-gray-300 group">
+                    <div @click="openAdd = true" class="w-full border-2 border-dashed border-gray-200 rounded-[2.5rem] py-10 flex items-center justify-center cursor-pointer hover:bg-gray-50 hover:border-blue-200 transition-all text-gray-300 group">
                         <i class="fas fa-plus text-5xl group-hover:scale-110 transition-transform"></i>
                     </div>
                 </div>
+                @foreach($groupedCategories as $mainCategory)
+                    <div class="mt-10">
+                        <h1 class="text-4xl font-black text-[#1e3a8a] mb-6 uppercase border-b-4 border-blue-500 inline-block" id={{ $mainCategory->name }}>
+                            {{ $mainCategory->name }}
+                        </h1>
 
-                <h2 class="text-3xl font-black text-[#1e3a8a] mb-8 uppercase tracking-tight">Ramen <i class="fas fa-edit text-xxl opacity-40 ml-3"></i></h2> 
+                        @foreach($mainCategory->subCategories as $sub)
+                            @if($sub->menus->count() > 0)
+                                {{-- CARI NILAI COUNT_SOLD TERTINGGI DI SUB KATEGORI INI --}}
+                                @php
+                                    $maxSold = $sub->menus->max('count_sold');
+                                @endphp
 
-                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-                    <div class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all text-center border border-gray-50 group cursor-pointer relative overflow-hidden">
-                        <div class="absolute top-4 right-4 bg-blue-500 text-white w-8 h-8 rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <i class="fas fa-plus text-sm"></i>
-                        </div>
-                        <div class="w-32 h-32 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shadow-inner">
-                             <i class="fas fa-bowl-rice text-4xl text-gray-300"></i>
-                        </div>
-                        <h3 class="font-black text-lg text-[#1e3a8a]">Shoyu Ramen</h3>
-                        <p class="text-sm font-bold text-gray-400 mt-1 tracking-wide">Rp. 15.000</p>
+                                <div class="mt-8 mb-4 flex items-center gap-3" id="{{ Str::slug($sub->name) }}">
+                                    <h2 class="text-2xl font-bold text-gray-700 uppercase">{{ $sub->name }}</h2>
+                                    <div class="h-[2px] flex-1 bg-gray-100"></div>
+                                </div>
+
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+                                    @foreach($sub->menus as $menu)
+                                        @php 
+                                            $menuData = $menu->toArray();
+                                            $menuData['sub_category'] = $sub; 
+                                        @endphp
+
+                                        <div @click="selectedMenu = {{ json_encode($menuData) }}; openDetail = true;" 
+                                            class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all cursor-pointer relative overflow-hidden group">
+                                            
+                                            {{-- BADGE BEST SELLER OTOMATIS --}}
+                                            {{-- Muncul jika count_sold menu ini sama dengan nilai tertinggi DAN bukan 0 --}}
+                                            @if($menu->count_sold > 0 && $menu->count_sold == $maxSold)
+                                                <div class="absolute top-5 left-0 z-10">
+                                                    <div class="bg-amber-400 text-[#1e3a8a] text-[10px] font-black px-3 py-1 rounded-r-full shadow-md flex items-center gap-1 uppercase tracking-tighter">
+                                                        <i class="fas fa-fire text-[8px]"></i>
+                                                        Best Seller
+                                                    </div>
+                                                </div>
+                                            @endif
+
+                                            {{-- GAMBAR --}}
+                                            <div class="w-32 h-32 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden relative">
+                                                @if($menu->image_url)
+                                                    <img src="{{ $menu->image_url }}" 
+                                                        class="w-full h-full object-cover transition-all duration-300"
+                                                        :class="'{{ $menu->status }}' !== 'available' ? 'grayscale opacity-40' : 'group-hover:scale-110'">
+                                                @else
+                                                    <i class="fas fa-utensils text-4xl text-gray-300"></i>
+                                                @endif
+
+                                                @if($menu->status !== 'available')
+                                                    <div class="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                                        <span class="bg-red-600 text-white text-[10px] font-black px-2 py-1 rounded shadow-lg uppercase -rotate-12 border border-white">
+                                                            Sold Out
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            </div>
+
+                                            {{-- TEXT SECTION --}}
+                                            <div class="text-center">
+                                                <h3 class="font-black text-lg text-[#1e3a8a] leading-tight">{{ $menu->name }}</h3>
+                                                <p class="text-sm font-bold text-gray-400 mt-2">Rp. {{ number_format($menu->price, 0, ',', '.') }}</p>
+                                                
+                                                @if($menu->status !== 'available')
+                                                    <div class="mt-2">
+                                                        <span class="text-[8px] font-black text-red-500 bg-red-50 px-3 py-1 rounded-full uppercase tracking-tighter">
+                                                            Stok Habis
+                                                        </span>
+                                                    </div>
+                                                @endif
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            @endif
+                        @endforeach
                     </div>
-
-                    <div class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all text-center border border-gray-50 group cursor-pointer relative">
-                        <div class="w-32 h-32 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shadow-inner">
-                            <i class="fas fa-utensils text-4xl text-gray-300"></i>
-                        </div>
-                        <h3 class="font-black text-lg text-[#1e3a8a]">Shio Ramen</h3>
-                        <p class="text-sm font-bold text-gray-400 mt-1 tracking-wide">Rp. 13.000</p>
-                    </div>
-
-                    <div class="bg-white p-6 rounded-[2.5rem] shadow-sm hover:shadow-xl transition-all text-center border border-gray-50 group cursor-pointer relative">
-                        <div class="w-32 h-32 mx-auto mb-5 rounded-full bg-gray-100 flex items-center justify-center overflow-hidden shadow-inner">
-                            <i class="fas fa-bowl-food text-4xl text-gray-300"></i>
-                        </div>
-                        <h3 class="font-black text-lg text-[#1e3a8a]">Miso Ramen</h3>
-                        <p class="text-sm font-bold text-gray-400 mt-1 tracking-wide">Rp. 13.000</p>
-                    </div>
-                </div>
+                @endforeach
             </main>
 
+            {{-- Sidebar Order Bemu --}}
             <aside class="w-[420px] bg-white border-l flex flex-col h-full shadow-2xl z-10">
                 <div class="p-7 flex justify-between items-start">
                     <div class="flex gap-4">
@@ -151,62 +611,35 @@
                             <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Order No. 164</span>
                         </div>
                     </div>
-                    <div class="flex gap-3 text-gray-300 mt-2">
-                        <button class="hover:text-blue-500 transition-colors"><i class="fas fa-edit text-xl"></i></button>
-                        <button class="hover:text-blue-500 transition-colors"><i class="fas fa-ellipsis-v text-xl"></i></button>
-                    </div>
                 </div>
-
-                <hr class="mx-7 border-gray-50">
-
-                <div class="flex-1 overflow-y-auto px-7 py-6 space-y-5">
-                    
-                    <div class="bg-[#f8fafc] rounded-[2rem] p-4 flex items-center gap-4 border border-transparent hover:border-blue-100 transition-all group">
-                        <div class="w-16 h-16 bg-white rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100 shadow-sm flex items-center justify-center">
-                            <i class="fas fa-bowl-rice text-gray-300"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h4 class="font-bold text-[#1e3a8a] text-sm">Shoyu Ramen</h4>
-                            <p class="text-xs text-gray-400 font-bold mt-0.5">Rp. 15.000</p>
-                        </div>
-                        <div class="flex items-center gap-3 bg-white px-3 py-2 rounded-2xl shadow-sm border border-gray-50">
-                            <button class="text-blue-400 font-black text-xl leading-none hover:text-blue-600">-</button>
-                            <span class="text-sm font-black text-gray-800">1</span>
-                            <button class="text-blue-400 font-black text-xl leading-none hover:text-blue-600">+</button>
-                        </div>
-                    </div>
-
-                    <div class="bg-[#f8fafc] rounded-[2rem] p-4 flex items-center gap-4 border border-transparent hover:border-blue-100 transition-all group">
-                        <div class="w-16 h-16 bg-white rounded-2xl overflow-hidden flex-shrink-0 border border-gray-100 shadow-sm flex items-center justify-center">
-                            <i class="fas fa-bowl-food text-gray-300"></i>
-                        </div>
-                        <div class="flex-1">
-                            <h4 class="font-bold text-[#1e3a8a] text-sm">Miso Ramen</h4>
-                            <p class="text-xs text-gray-400 font-bold mt-0.5">Rp. 13.000</p>
-                        </div>
-                        <div class="flex items-center gap-3 bg-white px-3 py-2 rounded-2xl shadow-sm border border-gray-50">
-                            <button class="text-blue-400 font-black text-xl leading-none hover:text-blue-600">-</button>
-                            <span class="text-sm font-black text-gray-800">1</span>
-                            <button class="text-blue-400 font-black text-xl leading-none hover:text-blue-600">+</button>
-                        </div>
-                    </div>
-
-                </div>
-
-                <div class="p-8">
-                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center shadow-2xl shadow-blue-200">
+                <div class="mt-auto p-8">
+                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center">
                         <div class="text-white">
-                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">Total Items (2)</p>
-                            <p class="text-3xl font-black">Rp. 28.000</p>
+                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">Total Items (1)</p>
+                            <p class="text-3xl font-black">Rp. 15.000</p>
                         </div>
-                        <button class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl hover:scale-105 transition-transform active:scale-95 shadow-md">
-                            Order
-                        </button>
+                        <button class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl">Order</button>
                     </div>
                 </div>
             </aside>
         </div>
     </div>
+   <script type="module">
+        function startListening() {
+            if (window.Echo) {
+                console.log('Echo detected! Connecting to Reverb...');
+                window.Echo.channel('pos-data-channel')
+                    .listen('.data.changed', (e) => {
+                        console.log('Realtime update:', e.type);
+                        window.location.reload();
+                    });
+            } else {
+                console.log('Waiting for Echo...');
+                setTimeout(startListening, 500); // Cek lagi setiap 0.5 detik
+            }
+        }
 
+        startListening();
+    </script>
 </body>
 </html>

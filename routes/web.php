@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\MenuController;
+use App\Http\Controllers\SubCategoryController;
 use Illuminate\Support\Facades\Auth;    
 
 use Illuminate\Support\Facades\Route;
@@ -13,6 +15,10 @@ route::get('/', function () {
     return redirect()->route('login');
 });
 Route::get('/login', [AuthController::class, 'index']);
-Route::get('/menus', [MenuController::class, 'index'])->name('menus.index');
 Route::post('/login', [AuthController::class, 'login'])->name('login'); 
+// Route::get('/menus', [MenuController::class, 'index'])->name('menus.index');
+Route::resource('menus', MenuController::class);
+Route::resource('categories', CategoryController::class);
+Route::resource('sub-categories', SubCategoryController::class);
+Route::post('/menus/{id}/toggle-status', [MenuController::class, 'toggleStatus']);
 
