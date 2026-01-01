@@ -14,129 +14,21 @@
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
         [x-cloak] { display: none !important; }
+
+        @media print {
+            #receipt-print {
+                width: 80mm; /* Sesuai lebar kertas printer thermal */
+                margin: 0 auto;
+                padding: 5px;
+            }
+            .no-print {
+                display: none;
+            }
+        }
         
     </style>
 </head>
-<body class="bg-[#f0f4f8] font-sans text-gray-800"
-  x-data="{ 
-    search: '',
-    openAdd: false, 
-    openDetail: false, 
-    openEdit: false,
-    openAddCategory: false, 
-    openAddSub: false, 
-    selectedMenu: {}, 
-    editData: {},
-    openEditCategory: false,
-    editCategoryData: {},
-    imagePreviewCategory: null,
-    openEditSub: false,
-    editSubData: { name: '', id: '', category_id: '' }, // Beri default object
-
-    // Helper untuk ambil CSRF secara aman
-    getCsrf() {
-        const tag = document.querySelector('meta[name=csrf-token]');
-        return tag ? tag.getAttribute('content') : '';
-    },
-
-    async toggleStatus(id) {
-        try {
-            const response = await fetch(`/menus/${id}/toggle-status`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': this.getCsrf(),
-                    'X-Requested-With': 'XMLHttpRequest'
-                }
-            });
-
-            const data = await response.json();
-
-            if (response.ok && data.success) {
-                // Update state di frontend agar tombol/label berubah seketika
-                if (this.selectedMenu && this.selectedMenu.id == id) {
-                    this.selectedMenu.status = data.new_status;
-                }
-
-                // Kirim notifikasi
-                window.dispatchEvent(new CustomEvent('notify', { 
-                    detail: { 
-                        message: `Status menu sekarang: ${data.new_status.toUpperCase()}`, 
-                        type: 'success' 
-                    } 
-                }));
-
-            } else {
-                throw new Error(data.message || 'Server Error 500');
-            }
-        } catch (error) {
-            console.error('Error:', error);
-            // Ganti alert dengan notifikasi error agar konsisten
-            window.dispatchEvent(new CustomEvent('notify', { 
-                detail: { message: error.message, type: 'error' } 
-            }));
-        }
-    },
-
-    openEditMenu(menu) {
-        this.openDetail = false;
-        this.editData = { ...menu }; 
-        this.openEdit = true;
-    },
-
-    async submitUpdate(event) {
-        const formData = new FormData(event.target);
-        formData.append('_method', 'PUT');
-
-        try {
-            const response = await fetch(`/menus/${this.editData.id}`, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'X-CSRF-TOKEN': this.getCsrf()
-                }
-            });
-
-            if (response.ok) {
-                this.openEdit = false; // Tutup dulu modalnya
-                window.dispatchEvent(new CustomEvent('notify', { 
-                    detail: { message: 'Status Berhasil Diubah!', type: 'success' } 
-                }));
-            } else {
-                alert('Gagal update data');
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    },
-
-    async confirmDelete(id) {
-        if (!confirm('Yakin mau hapus menu ini?')) return;
-
-        try {
-            const response = await fetch(`/menus/${id}`, {
-                method: 'DELETE',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-TOKEN': this.getCsrf()
-                }
-            });
-            const data = await response.json();
-           if (data.success) {
-                this.openDetail = false; // Tutup dulu detailnya
-                window.dispatchEvent(new CustomEvent('notify', { 
-                    detail: { message: 'Menu Berhasil Dihapus!', type: 'success' } 
-                }));
-            } else {
-                alert('Gagal menghapus menu');
-            }
-        } catch (error) {
-            console.error(error);
-        }
-    }
-}"
- @close-modal-add.window="openAdd = false">
+<body class="bg-[#f0f4f8] font-sans text-gray-800" x-data="adminApp()" @incoming-order.window="receiveOrder($event.detail)" @close-modal-add.window="openAdd = false">
     <div x-data="{ 
             show: false, 
             message: '', 
@@ -191,6 +83,102 @@
         </div>
     </div>
     {{-- Pop up Section --}}
+    <div x-show="showReceipt" x-cloak 
+     x-transition.opacity
+     class="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+    
+        <div @click.away="showReceipt = false" 
+            class="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl transform transition-all">
+            
+            <div id="receipt-print" class="p-8 bg-white text-gray-800 font-mono text-sm">
+                <div class="text-center mb-6">
+                    <h3 class="text-2xl font-black text-[#1e3a8a] mb-1">KAISEI POS</h3>
+                    <p class="text-[10px] text-gray-400 leading-tight">Jl. Contoh Alamat Resto No. 123<br>Telp: 0812-3456-7890</p>
+                </div>
+
+                <div class="border-b border-dashed border-gray-200 pb-4 mb-4 space-y-1">
+                    <div class="flex justify-between uppercase text-[10px] font-bold">
+                        <span>No. Antrian:</span>
+                        <span class="text-blue-600" x-text="'#' + lastBill.queue_number"></span>
+                    </div>
+                    <div class="flex justify-between text-[10px]">
+                        <span x-text="new Date().toLocaleString('id-ID')"></span>
+                        <span x-text="lastBill.payment_method?.toUpperCase()"></span>
+                    </div>
+                </div>
+
+                <div class="space-y-3 mb-6 border-b border-dashed border-gray-200 pb-4">
+                    <template x-for="item in cart" :key="item.id">
+                        <div class="flex flex-col mb-2">
+                            <div class="flex justify-between items-start text-sm">
+                                <span class="font-bold flex-1 pr-2" x-text="item.name"></span>
+                                <span class="font-bold whitespace-nowrap" x-text="formatRupiah(item.price * item.quantity)"></span>
+                            </div>
+                            <div class="text-[10px] text-gray-500 italic">
+                                <span x-text="item.quantity"></span> x <span x-text="formatRupiah(item.price)"></span>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <div class="space-y-1 text-sm">
+                    <div class="flex justify-between">
+                        <span>Subtotal</span>
+                        <span x-text="formatRupiah(totalPrice)"></span>
+                    </div>
+                    <div class="flex justify-between font-bold text-lg border-t border-gray-100 pt-2 mt-2">
+                        <span>TOTAL</span>
+                        <span class="text-[#1e3a8a]" x-text="formatRupiah(totalPrice)"></span>
+                    </div>
+                    
+                    <div class="flex justify-between text-xs mt-4 pt-4 border-t border-dashed border-gray-200">
+                        <span>Metode:</span>
+                        <span class="font-bold uppercase" x-text="lastBill.payment_method"></span>
+                    </div>
+                    <div class="flex justify-between text-xs">
+                        <span>Bayar:</span>
+                        <span x-text="formatRupiah(amountPaid)"></span>
+                    </div>
+                    <div class="flex justify-between text-xs font-bold text-green-600">
+                        <span>Kembali:</span>
+                        <span x-text="formatRupiah(calculateChange())"></span>
+                    </div>
+                </div>
+
+                <div class="text-center mt-8 text-[10px] text-gray-400">
+                    <p>Terima kasih atas kunjungan Anda!</p>
+                    <p class="mt-1 italic">Simpan struk ini sebagai bukti pembayaran.</p>
+                </div>
+            </div>
+
+            <div class="p-6 bg-gray-50 flex gap-3">
+                <button @click="showReceipt = false" 
+                    class="flex-1 py-4 bg-white border border-gray-200 text-gray-600 rounded-2xl font-bold hover:bg-gray-100 transition-all">
+                    Tutup
+                </button>
+                <button @click="window.print()" 
+                    class="flex-1 py-4 bg-[#1e3a8a] text-white rounded-2xl font-bold shadow-lg shadow-blue-100 hover:scale-105 active:scale-95 transition-all flex items-center justify-center gap-2">
+                    <i class="fas fa-print"></i> Cetak
+                </button>
+            </div>
+        </div>
+    </div>
+    <div x-show="showServiceModal" x-cloak class="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-[3rem] w-full max-w-sm text-center">
+            <h3 class="text-2xl font-black text-[#1e3a8a] mb-6">Makan di sini atau bawa pulang?</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <button @click="confirmOrder('dine_in')" class="p-6 border-2 border-blue-100 rounded-[2rem] hover:bg-blue-50 transition-all">
+                    <i class="fas fa-utensils text-3xl text-blue-500 mb-2"></i>
+                    <span class="block font-bold">Dine In</span>
+                </button>
+                <button @click="confirmOrder('take_away')" class="p-6 border-2 border-blue-100 rounded-[2rem] hover:bg-blue-50 transition-all">
+                    <i class="fas fa-shopping-bag text-3xl text-blue-500 mb-2"></i>
+                    <span class="block font-bold">Take Away</span>
+                </button>
+            </div>
+            <button @click="showServiceModal = false" class="mt-6 text-gray-400 font-bold uppercase text-xs tracking-widest">Batal</button>
+        </div>
+    </div>
     <div x-show="openAdd" x-cloak class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
         <form action="{{ route('menus.store') }}" method="POST" enctype="multipart/form-data" 
             @submit.prevent="submitForm($event)"
@@ -523,7 +511,7 @@
 
                 <div class="space-y-3">
                     <button x-show="selectedMenu.status === 'available'"
-                            @click="openDetail = false; /* Logic keranjang */" 
+                            @click="openDetail = false; addToCart(selectedMenu)" 
                             class="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase">
                         <i class="fas fa-cart-plus"></i> Tambah Pesanan
                     </button>
@@ -889,43 +877,358 @@
 
             {{-- Sidebar Order Bemu --}}
             <aside class="w-[420px] bg-white border-l flex flex-col h-full shadow-2xl z-10">
+                {{-- HEADER --}}
                 <div class="p-7 flex justify-between items-start">
                     <div class="flex gap-4">
                         <div class="w-14 h-14 bg-[#3b82f6] rounded-[1.2rem] flex items-center justify-center shadow-lg shadow-blue-100">
                             <i class="fas fa-clipboard-list text-white text-2xl"></i>
                         </div>
                         <div>
-                            <h2 class="text-2xl font-black text-[#1e3a8a]">Order Menu</h2>
-                            <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Order No. 164</span>
+                            <div class="flex items-center gap-2">
+                                <h2 class="text-2xl font-black text-[#1e3a8a]">Order Menu</h2>
+                                <template x-if="currentQueueNumber">
+                                    <span class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-bold" x-text="'#' + currentQueueNumber"></span>
+                                </template>
+                            </div>
+                            <p class="text-xs text-gray-400 font-bold uppercase tracking-widest" x-text="currentServiceType.replace('_', ' ')"></p>
                         </div>
                     </div>
                 </div>
-                <div class="mt-auto p-8">
-                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center">
-                        <div class="text-white">
-                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">Total Items (1)</p>
-                            <p class="text-3xl font-black">Rp. 15.000</p>
+
+                {{-- LIST ITEM KERANJANG --}}
+                <div class="flex-1 overflow-y-auto px-7 py-2 space-y-4">
+                    <template x-for="item in cart" :key="item.id">
+                        <div class="flex items-center gap-4 bg-gray-50 p-4 rounded-[2rem]">
+                            <img :src="item.image || '/images/default-food.png'" class="w-16 h-16 rounded-full object-cover shadow-sm">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-[#1e3a8a] text-sm" x-text="item.name"></h4>
+                                <p class="text-xs font-bold text-gray-400" x-text="formatRupiah(item.price)"></p>
+                            </div>
+                            <div class="flex items-center gap-3 bg-white px-3 py-1 rounded-full border border-gray-100">
+                                <button @click="updateQuantity(item.id, -1)" class="text-gray-400 hover:text-red-500 font-black">-</button>
+                                <span class="font-bold text-sm w-4 text-center" x-text="item.quantity"></span>
+                                <button @click="updateQuantity(item.id, 1)" class="text-blue-500 font-black">+</button>
+                            </div>
                         </div>
-                        <button class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl">Order</button>
+                    </template>
+
+                    {{-- STATE KOSONG --}}
+                    <div x-show="cart.length === 0" class="h-full flex flex-col items-center justify-center text-center opacity-30 py-20">
+                        <i class="fas fa-shopping-basket text-6xl mb-4"></i>
+                        <p class="font-bold uppercase tracking-widest text-xs">Keranjang Kosong</p>
+                    </div>
+                </div>
+
+                {{-- PAYMENT SECTION (Hanya muncul jika ada item) --}}
+                <div x-show="cart.length > 0" x-cloak class="px-7 py-4 bg-gray-50 border-t border-b border-gray-100 space-y-3">
+                    <div>
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Payment Method</label>
+                        <div class="flex gap-2 mt-1">
+                            <button @click="paymentMethod = 'cash'; paymentProof = null" 
+                                :class="paymentMethod === 'cash' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">CASH</button>
+                            <button @click="paymentMethod = 'qris'" 
+                                :class="paymentMethod === 'qriss' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">QRIS</button>
+                            <button @click="paymentMethod = 'transfer'" 
+                                :class="paymentMethod === 'ewallet' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">TRANSFER</button>
+                        </div>
+                    </div>
+
+                    <div x-show="paymentMethod !== 'cash'" x-transition class="space-y-1">
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Payment Proof (Image)</label>
+                        <div class="relative h-20 w-full border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center overflow-hidden bg-white">
+                            <template x-if="!paymentProofPreview">
+                                <div class="text-center">
+                                    <i class="fas fa-camera text-gray-300 mb-1"></i>
+                                    <p class="text-[9px] text-gray-400 font-bold">Upload Bukti</p>
+                                </div>
+                            </template>
+                            <template x-if="paymentProofPreview">
+                                <img :src="paymentProofPreview" class="h-full w-full object-cover">
+                            </template>
+                            <input type="file" @change="handleFileUpload($event)" 
+                                class="absolute inset-0 opacity-0 cursor-pointer">
+                        </div>
+                    </div>
+
+                    <div class="flex gap-3">
+                        <div class="flex-1">
+                            <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Amount Paid</label>
+                            <input type="number" x-model="amountPaid" :disabled="paymentMethod === 'qriss'"
+                                :class="paymentMethod === 'qriss' ? 'bg-gray-100' : 'bg-white'"
+                                class="w-full mt-1 px-4 py-2 rounded-xl border border-gray-200 outline-none font-bold text-[#1e3a8a]">
+                        </div>
+                        <div class="flex-1">
+                            <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Change</label>
+                            <div class="mt-1 px-4 py-2 rounded-xl bg-gray-200 font-black text-gray-600" x-text="formatRupiah(calculateChange())"></div>
+                        </div>
+                    </div>
+                </div>
+
+                {{-- FOOTER TOTAL --}}
+                <div class="p-8">
+                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center transition-all shadow-xl shadow-blue-100"
+                        :class="cart.length === 0 || (paymentMethod === 'cash' && amountPaid < totalPrice) ? 'grayscale opacity-50' : ''">
+                        <div class="text-white">
+                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">
+                                Total Order (<span x-text="totalItems"></span>)
+                            </p>
+                            <p class="text-2xl font-black" x-text="formatRupiah(totalPrice)"></p>
+                        </div>
+                        <button :disabled="cart.length === 0 || (paymentMethod === 'cash' && amountPaid < totalPrice)" 
+                                @click="checkout()"
+                                class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl hover:scale-105 active:scale-95 transition-transform">
+                            Order
+                        </button>
                     </div>
                 </div>
             </aside>
         </div>
     </div>
+    {{-- Script untuk mendengarkan event real-time --}}
    <script type="module">
-        function startListening() {
+    function startListening() {
             if (window.Echo) {
+                console.log('Echo Connected. Listening for orders...');
+
+                // 1. Channel Lama Lu (Untuk Sinkronisasi Data Umum)
                 window.Echo.channel('pos-data-channel')
                     .listen('.data.changed', (e) => {
+                        console.log('Data changed, reloading...');
                         window.location.reload();
                     });
+
+                // 2. Channel Baru Untuk Pesanan Real-time (Kasir)
+                window.Echo.channel('orders')
+                .listen('.new-order', (data) => {
+                    console.log('Echo catch:', data);
+                    if (data.cartGroup) {
+                        // Gunakan delay kecil untuk memastikan Alpine siap menerima
+                        setTimeout(() => {
+                            window.dispatchEvent(new CustomEvent('incoming-order', { 
+                                detail: data.cartGroup 
+                            }));
+                        }, 100);
+                    }
+                });
+
             } else {
                 console.log('Waiting for Echo...');
-                setTimeout(startListening, 500); // Cek lagi setiap 0.5 detik
+                setTimeout(startListening, 500); 
             }
         }
 
         startListening();
+    </script>
+    <script>
+        function adminApp(){
+            return {
+                 // --- STATE CRUD & UI ---
+                search: '',
+                openAdd: false, 
+                openDetail: false, 
+                openEdit: false,
+                openAddCategory: false, 
+                openAddSub: false, 
+                selectedMenu: {}, 
+                editData: {},
+                openEditCategory: false,
+                editCategoryData: {},
+                imagePreviewCategory: null,
+                openEditSub: false,
+                editSubData: { name: '', id: '', category_id: '' },
+
+                // --- STATE CART & ORDER ---
+                cart: [],
+                currentCartGroupId: null, // Untuk melacak keranjang mana yang sedang diproses
+                currentQueueNumber: null, // TAMBAHKAN INI
+                currentServiceType: '',   // TAMBAHKAN INI
+                showServiceModal: false,
+
+                // PAYMENT STATE
+                paymentMethod: 'cash',
+                amountPaid: 0,
+
+                // Bill
+                showReceipt: false,
+                lastBill: {},
+                // State Bukti Pembayaran
+                paymentProof: null,
+                paymentProofPreview: null,
+
+                handleFileUpload(event) {
+                    const file = event.target.files[0];
+                    if (file) {
+                        this.paymentProof = file;
+                        this.paymentProofPreview = URL.createObjectURL(file);
+                    }
+                },
+               receiveOrder(cartGroup) {
+                    console.log('Alpine menerima data:', cartGroup);
+                    this.currentCartGroupId = cartGroup.id;
+                    this.currentQueueNumber = cartGroup.queue_number;
+                    this.currentServiceType = cartGroup.service_type;
+                    this.amountPaid = 0; 
+
+                    if (cartGroup.items) {
+                        this.cart = cartGroup.items.map(item => ({
+                            id: item.menu_id,
+                            name: item.menu ? item.menu.name : 'Unknown',
+                            price: item.price,
+                            image: item.menu ? item.menu.image_url : '',
+                            quantity: item.quantity
+                        }));
+                    }
+                },
+                calculateChange() {
+                    if (this.paymentMethod !== 'cash') return 0;
+                    let change = this.amountPaid - this.totalPrice;
+                    return change > 0 ? change : 0;
+                },
+                get totalItems() {
+                    return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+                },
+
+                get totalPrice() {
+                    return this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                },
+                // --- HELPER FUNCTIONS ---
+                getCsrf() {
+                    const tag = document.querySelector('meta[name=csrf-token]');
+                    return tag ? tag.getAttribute('content') : '';
+                },
+                
+                formatRupiah(number) {
+                    return new Intl.NumberFormat('id-ID', { 
+                        style: 'currency', 
+                        currency: 'IDR', 
+                        minimumFractionDigits: 0 
+                    }).format(number);
+                },
+
+                // --- CART LOGIC ---
+                addToCart(menu) {
+                    const existingItem = this.cart.find(item => item.id === menu.id);
+                    if (existingItem) {
+                        existingItem.quantity++;
+                    } else {
+                        this.cart.push({
+                            id: menu.id,
+                            name: menu.name,
+                            price: menu.price,
+                            image: menu.image_url,
+                            quantity: 1
+                        });
+                    }
+                    // Kirim notifikasi sukses
+                    window.dispatchEvent(new CustomEvent('notify', { 
+                        detail: { message: menu.name + ' ditambahkan!', type: 'success' } 
+                    }));
+                },
+
+                removeFromCart(id) {
+                    this.cart = this.cart.filter(item => item.id !== id);
+                },
+
+                updateQuantity(id, delta) {
+                    const item = this.cart.find(i => i.id === id);
+                    if (item) {
+                        item.quantity += delta;
+                        if (item.quantity < 1) {
+                            this.cart = this.cart.filter(i => i.id !== id);
+                        }
+                    }
+                },
+                // --- CHECKOUT LOGIC ---
+                async checkout() {
+                    // Validasi tambahan untuk QRIS
+                    if (this.paymentMethod === 'qriss' && !this.paymentProof) {
+                        alert('Silakan upload bukti pembayaran QRIS terlebih dahulu!');
+                        return;
+                    }
+
+                    // Karena ada file, kita gunakan FormData
+                    let formData = new FormData();
+                    formData.append('cart_group_id', this.currentCartGroupId);
+                    formData.append('payment_method', this.paymentMethod);
+                    formData.append('total_price', this.totalPrice);
+                    formData.append('amount_paid', this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid);
+                    formData.append('change', this.calculateChange());
+                    formData.append('items', JSON.stringify(this.cart));
+                    
+                    if (this.paymentProof) {
+                        formData.append('payment_proof', this.paymentProof);
+                    }
+
+                    try {
+                        const response = await fetch(`/orders/confirm-cart/${this.currentCartGroupId}`, {
+                            method: 'POST',
+                            headers: {
+                                'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content
+                                // Jangan set Content-Type header jika pakai FormData, biarkan browser yang set
+                            },
+                            body: formData
+                        });
+
+                        if (response.ok) {
+                            this.showReceipt = true;
+                            // Reset upload state
+                            this.paymentProof = null;
+                            this.paymentProofPreview = null;
+                        }
+                    } catch (error) {
+                        console.error(error);
+                    }
+                },
+                // --- CRUD FUNCTIONS (EXISTING) ---
+                async toggleStatus(id) {
+                    try {
+                        const response = await fetch(`/menus/${id}/toggle-status`, {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRF-TOKEN': this.getCsrf(),
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }
+                        });
+                        const data = await response.json();
+                        if (response.ok && data.success) {
+                            if (this.selectedMenu && this.selectedMenu.id == id) {
+                                this.selectedMenu.status = data.new_status;
+                            }
+                            window.dispatchEvent(new CustomEvent('notify', { 
+                                detail: { message: `Status: ${data.new_status.toUpperCase()}`, type: 'success' } 
+                            }));
+                        }
+                    } catch (error) { console.error(error); }
+                },
+
+                openEditMenu(menu) {
+                    this.openDetail = false;
+                    this.editData = { ...menu }; 
+                    this.openEdit = true;
+                },
+
+                async confirmDelete(id) {
+                    if (!confirm('Yakin mau hapus menu ini?')) return;
+                    try {
+                        const response = await fetch(`/menus/${id}`, {
+                            method: 'DELETE',
+                            headers: { 'X-CSRF-TOKEN': this.getCsrf() }
+                        });
+                        const data = await response.json();
+                        if (data.success) {
+                            this.openDetail = false;
+                            window.dispatchEvent(new CustomEvent('notify', { 
+                                detail: { message: 'Menu Dihapus!', type: 'success' } 
+                            }));
+                        }
+                    } catch (error) { console.error(error); }
+                }
+            }
+        }
     </script>
 </body>
 </html>

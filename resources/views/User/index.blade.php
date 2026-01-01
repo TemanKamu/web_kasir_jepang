@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Kaisei POS - Full Layout</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.tailwindcss.com"></script>
@@ -15,11 +16,98 @@
         [x-cloak] { display: none !important; }
     </style>
 </head>
-<body class="bg-[#f0f4f8] font-sans text-gray-800" x-data="{
+<body class="bg-[#f0f4f8] font-sans text-gray-800" 
+    x-data="{
         openAdd: false,
         openDetail: false,
         selectedMenu: {},
         search: '',
+        cart: [],
+        showServiceModal: false,
+
+        // Fungsi untuk membuka modal pilihan service
+        checkout() {
+            if (this.cart.length > 0) {
+                this.showServiceModal = true;
+            }
+        },
+
+        // Di dalam x-data index.blade.php
+        async confirmOrder(serviceType) {
+            const payload = {
+                service_type: serviceType,
+                items: this.cart,
+                total_price: this.totalPrice // Tambahkan ini agar sinkron dengan tabel cart_groups
+            };
+
+            try {
+                const response = await fetch('/orders/store', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content
+                    },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.status === 'success') {
+                    // Reset keranjang setelah berhasil
+                    this.cart = [];
+                    this.showServiceModal = false;
+
+                    // Beritahu customer nomor antrian mereka
+                    alert('Pesanan Terkirim! Nomor Antrian Anda: #' + data.queue_number);
+                } else {
+                    alert('Gagal mengirim pesanan: ' + (data.message || 'Error tidak diketahui'));
+                }
+            } catch (error) {
+                console.error(error);
+                alert('Terjadi kesalahan koneksi.');
+            }
+        },
+
+        addToCart(menu) {
+            const existingItem = this.cart.find(item => item.id === menu.id);
+            if (existingItem) {
+                existingItem.quantity++;
+            } else {
+                this.cart.push({
+                    id: menu.id,
+                    name: menu.name,
+                    price: menu.price,
+                    image: menu.image_url,
+                    quantity: 1
+                });
+            }
+        },
+
+        updateQuantity(id, delta) {
+            const item = this.cart.find(item => item.id === id);
+            if (item) {
+                item.quantity += delta;
+                if (item.quantity < 1) {
+                    this.cart = this.cart.filter(i => i.id !== id);
+                }
+            }
+        },
+
+        get totalItems() {
+            return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+        },
+
+        get totalPrice() {
+            return this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+        },
+
+      formatRupiah(number) {
+            return new Intl.NumberFormat('id-ID', { 
+                style: 'currency', 
+                currency: 'IDR', 
+                minimumFractionDigits: 0 
+            }).format(number);
+        },
     }">
     
      {{-- Modal Detail Menu --}}
@@ -74,12 +162,29 @@
 
                 <div class="space-y-3">
                     <button x-show="selectedMenu.status === 'available'"
-                            @click="openDetail = false; /* Logic keranjang */" 
+                            @click="openDetail = false; addToCart(selectedMenu)"
                             class="w-full py-5 bg-blue-600 text-white rounded-[2rem] font-black text-xl shadow-xl shadow-blue-100 hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-3 uppercase">
                         <i class="fas fa-cart-plus"></i> Tambah Pesanan
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+    {{-- Modal Pilihan Service Tyype --}}
+    <div x-show="showServiceModal" x-cloak class="fixed inset-0 z-[150] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+        <div class="bg-white p-8 rounded-[3rem] w-full max-w-sm text-center">
+            <h3 class="text-2xl font-black text-[#1e3a8a] mb-6">Makan di sini atau bawa pulang?</h3>
+            <div class="grid grid-cols-2 gap-4">
+                <button @click="confirmOrder('dine_in')" class="p-6 border-2 border-blue-100 rounded-[2rem] hover:bg-blue-50 transition-all">
+                    <i class="fas fa-utensils text-3xl text-blue-500 mb-2"></i>
+                    <span class="block font-bold">Dine In</span>
+                </button>
+                <button @click="confirmOrder('take_away')" class="p-6 border-2 border-blue-100 rounded-[2rem] hover:bg-blue-50 transition-all">
+                    <i class="fas fa-shopping-bag text-3xl text-blue-500 mb-2"></i>
+                    <span class="block font-bold">Take Away</span>
+                </button>
+            </div>
+            <button @click="showServiceModal = false" class="mt-6 text-gray-400 font-bold uppercase text-xs tracking-widest">Batal</button>
         </div>
     </div>
     <div class="flex h-screen flex-col overflow-hidden">
@@ -233,6 +338,7 @@
 
             {{-- Sidebar Order Bemu --}}
             <aside class="w-[420px] bg-white border-l flex flex-col h-full shadow-2xl z-10">
+                {{-- HEADER --}}
                 <div class="p-7 flex justify-between items-start">
                     <div class="flex gap-4">
                         <div class="w-14 h-14 bg-[#3b82f6] rounded-[1.2rem] flex items-center justify-center shadow-lg shadow-blue-100">
@@ -240,17 +346,50 @@
                         </div>
                         <div>
                             <h2 class="text-2xl font-black text-[#1e3a8a]">Order Menu</h2>
-                            <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Order No. 164</span>
+                            {{-- <span class="text-xs text-gray-400 font-bold uppercase tracking-widest">Table No. 05</span> --}}
                         </div>
                     </div>
                 </div>
-                <div class="mt-auto p-8">
-                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center">
-                        <div class="text-white">
-                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">Total Items (1)</p>
-                            <p class="text-3xl font-black">Rp. 15.000</p>
+
+                {{-- LIST ITEM KERANJANG --}}
+                <div class="flex-1 overflow-y-auto px-7 py-2 space-y-4">
+                    <template x-for="item in cart" :key="item.id">
+                        <div class="flex items-center gap-4 bg-gray-50 p-4 rounded-[2rem]">
+                            <img :src="item.image || '/images/default-food.png'" class="w-16 h-16 rounded-full object-cover shadow-sm">
+                            <div class="flex-1">
+                                <h4 class="font-bold text-[#1e3a8a] text-sm" x-text="item.name"></h4>
+                                <p class="text-xs font-bold text-gray-400" x-text="formatRupiah(item.price)"></p>
+                            </div>
+                            <div class="flex items-center gap-3 bg-white px-3 py-1 rounded-full border border-gray-100">
+                                <button @click="updateQuantity(item.id, -1)" class="text-gray-400 hover:text-red-500 font-black">-</button>
+                                <span class="font-bold text-sm w-4 text-center" x-text="item.quantity"></span>
+                                <button @click="updateQuantity(item.id, 1)" class="text-blue-500 font-black">+</button>
+                            </div>
                         </div>
-                        <button class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl">Order</button>
+                    </template>
+
+                    {{-- STATE KOSONG --}}
+                    <div x-show="cart.length === 0" class="h-full flex flex-col items-center justify-center text-center opacity-30 py-20">
+                        <i class="fas fa-shopping-basket text-6xl mb-4"></i>
+                        <p class="font-bold uppercase tracking-widest text-xs">Keranjang Kosong</p>
+                    </div>
+                </div>
+
+                {{-- FOOTER TOTAL --}}
+                <div class="p-8 border-t border-gray-50">
+                    <div class="bg-[#2d8aff] rounded-[2.5rem] p-6 flex justify-between items-center transition-all"
+                        :class="cart.length === 0 ? 'grayscale opacity-50' : ''">
+                        <div class="text-white">
+                            <p class="text-xs font-bold uppercase opacity-70 tracking-tighter">
+                                Total Items (<span x-text="totalItems"></span>)
+                            </p>
+                            <p class="text-2xl font-black" x-text="formatRupiah(totalPrice)"></p>
+                        </div>
+                        <button :disabled="cart.length === 0" 
+                                @click="checkout()"
+                                class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl hover:scale-105 active:scale-95 transition-transform">
+                            Order
+                        </button>
                     </div>
                 </div>
             </aside>
