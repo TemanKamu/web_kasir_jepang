@@ -150,6 +150,9 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="mt-6">
+                    {{ $users->links() }}
+                </div>
             </div>
         </main>
     </div>
@@ -222,7 +225,6 @@
             return {
                 showModal: false,
                 isEdit: false,
-                // Di dalam script userManagement()
                 users: @json($users instanceof \Illuminate\Pagination\LengthAwarePaginator ? $users->items() : $users),
                 errors: {}, // Tempat menyimpan pesan error validasi
                 formData: { id: null, name: '', email: '', phone_number: '', password: '', role_id: 2 },

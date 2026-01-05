@@ -17,38 +17,47 @@ use Illuminate\Support\Str;
 
 class BillController extends Controller
 {
+    /**
+     * Dashboard Bill Index
+     */
     public function index(Request $request)
     {
         $query = Bill::with(['user', 'orderedMenus.menu']);
 
-        // Filter Search (ID atau Nomor Antrean)
+        // Filter Search (UUID atau Nomor Antrean)
         if ($request->filled('search')) {
-            $query->where('code', 'like', '%' . $request->search . '%')
-                ->orWhere('queue_number', 'like', '%' . $request->search . '%');
+            $query->where(function($q) use ($request) {
+                $q->where('code', 'like', '%' . $request->search . '%')
+                  ->orWhere('queue_number', $request->search);
+            });
         }
 
-        // Filter Tanggal (Baru)
+        // Filter Tanggal
         if ($request->filled('date')) {
-            $query->whereDate('date', $request->date);
+            $query->whereDate('created_at', $request->date);
         }
 
-        // Filter Status
+        // Filter Status (Pending / Completed)
         if ($request->filled('status')) {
             $query->where('status', $request->status);
         }
 
-        // Urutkan Harga
-        if ($request->filled('sort_price')) {
-            $query->orderBy('amount_paid', $request->sort_price);
-        } else {
-            $query->orderBy('date', 'desc');
-        }
-
-        // Tetap gunakan pagination agar performa terjaga
-        $bills = $query->paginate(10)->withQueryString();
+        $bills = $query->orderBy('created_at', 'desc')->paginate(10)->withQueryString();
 
         return view('bills.index', compact('bills'));
     }
+
+    public function processToPos($id) 
+    {
+        $bill = Bill::with('orderedMenus.menu')->findOrFail($id);
+        
+        // Simpan data bill ke dalam session
+        session()->flash('process_bill', $bill);
+        
+        // Alihkan ke halaman POS (admin.blade.php)
+        return redirect()->route('menus.index'); // Sesuaikan dengan nama route admin kamu
+    }
+
 
 
    public function destroy($id)

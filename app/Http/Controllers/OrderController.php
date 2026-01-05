@@ -13,43 +13,63 @@ use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
-    // OrderController.php
+    /**
+     * Digunakan oleh Customer (Tablet) untuk memesan.
+     * Pesanan masuk ke tabel Bill dengan status 'pending'.
+     */
+   // Bagian store() yang diperbaiki
     public function store(Request $request) 
     {
         try {
-            $cartGroup = DB::transaction(function () use ($request) {
-                // Generate Nomor Antrian Otomatis untuk hari ini
-                $todayQueue = \App\Models\CartGroup::whereDate('created_at', now())->count() + 1;
+            $bill = DB::transaction(function () use ($request) {
+                // Gunakan tabel Bill untuk hitung antrian agar sinkron
+                $todayQueue = Bill::whereDate('created_at', now())->count() + 1;
 
-                $newGroup = \App\Models\CartGroup::create([
-                    'queue_number' => $todayQueue, // Nomor antrian di-set di sini
+                $newBill = Bill::create([
+                    'code' => (string) Str::uuid(),
+                    'queue_number' => $todayQueue,
+                    'user_id' => Auth::id() ?? 1,
                     'service_type' => $request->service_type,
                     'total_price' => $request->total_price,
                     'status' => 'pending',
+                    'payment_method' => 'cash', 
+                    'amount_paid' => 0,
+                    'change' => 0,
+                    'date' => now(),
                 ]);
 
+                // Loop dari request (ini benar menggunakan $request->items karena dari frontend)
                 foreach ($request->items as $item) {
-                    \App\Models\Cart::create([
-                        'cart_group_id' => $newGroup->id,
+                    OrderedMenu::create([
+                        'bill_id' => $newBill->id,
                         'menu_id' => $item['id'],
                         'quantity' => $item['quantity'],
-                        'price' => $item['price'],
+                        'total_price' => $item['price'] * $item['quantity'],
                     ]);
                 }
-                return $newGroup;
+
+                return $newBill;
             });
-            // Log::info('Triggering Broadcast untuk Cart ID: ' . $cartGroup->id);
-            broadcast(new OrderPlaced($cartGroup->load('items.menu')))->toOthers();
+
+            // Broadcast dengan relasi yang benar
+            broadcast(new OrderPlaced($bill->load('orderedMenus.menu')))->toOthers();
+
             return response()->json([
                 'status' => 'success', 
                 'message' => 'Pesanan dikirim!',
-                'queue_number' => $cartGroup->queue_number // Beritahu customer nomor mereka
+                'queue_number' => $bill->queue_number
             ]);
         } catch (\Exception $e) {
+            // Log error agar Anda bisa lihat di storage/logs/laravel.log jika gagal
+            Log::error("Order Error: " . $e->getMessage());
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
 
+    /**
+     * Digunakan oleh Kasir untuk mengonfirmasi pembayaran (Status pending -> completed)
+     * ATAU untuk pesanan langsung dari Kasir (ID null).
+     */
     public function confirmCart(Request $request, $id = null)
     {
         try {
@@ -61,89 +81,88 @@ class OrderController extends Controller
                 $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
             }
 
-            // Simpan hasil transaction ke variabel $bill
             $bill = DB::transaction(function () use ($request, $id, $proofPath) {
+                
+                // JIKA PESANAN SUDAH ADA (DARI CUSTOMER / STATUS PENDING)
                 if ($id && $id !== 'null') {
-                    $cartGroup = \App\Models\CartGroup::findOrFail($id);
-                    $queueNumber = $cartGroup->queue_number;
-                    $serviceType = $cartGroup->service_type;
-                    $cartGroup->update(['status' => 'confirmed']);
-                } 
-                else {
-                    // Perbaikan: Ambil nomor antrian terbaru dari Bill atau CartGroup hari ini
-                    $countCart = \App\Models\CartGroup::whereDate('created_at', now())->count();
-                    $countBill = \App\Models\Bill::whereDate('created_at', now())->count();
-                    $queueNumber = max($countCart, $countBill) + 1;
-                    $serviceType = $request->service_type ?? 'dine_in';
-                }
-
-                $newBill = \App\Models\Bill::create([
-                    'code' => (string) \Illuminate\Support\Str::uuid(),
-                    'queue_number' => $queueNumber,
-                    'user_id' => Auth::id() ?? 1,
-                    'service_type' => $serviceType,
-                    'payment_method' => $request->payment_method,
-                    'amount_paid' => (int) $request->amount_paid,
-                    'change' => (int) ($request->change ?? 0), 
-                    'total_price' => (int) $request->total_price,
-                    'status' => 'completed',
-                    'date' => now(),
-                ]);
-
-                $items = is_string($request->items) ? json_decode($request->items, true) : $request->items;
-                foreach ($items as $item) {
-                    \App\Models\OrderedMenu::create([
-                        'bill_id' => $newBill->id,
-                        'menu_id' => $item['id'],
-                        'quantity' => $item['quantity'],
-                        'total_price' => $item['price'] * $item['quantity'],
+                    $existingBill = Bill::with('orderedMenus')->findOrFail($id);
+                    
+                    $existingBill->update([
+                        'user_id' => Auth::id() ?? $existingBill->user_id,
+                        'payment_method' => $request->payment_method,
+                        'amount_paid' => (int) $request->amount_paid,
+                        'change' => (int) ($request->change ?? 0),
+                        'status' => 'completed',
                     ]);
-                }
 
-                return $newBill;
+                    // Update count_sold untuk setiap menu yang sudah dipesan customer sebelumnya
+                    foreach ($existingBill->orderedMenus as $orderItem) {
+                        \App\Models\Menu::where('id', $orderItem->menu_id)
+                            ->increment('count_sold', $orderItem->quantity);
+                    }
+
+                    if ($proofPath) {
+                        \App\Models\ProofTransferPayment::create([
+                            'bill_id' => $existingBill->id,
+                            'image' => $proofPath,
+                        ]);
+                    }
+                    event(new \App\Events\DataUpdated('menu_updated'));
+                    return $existingBill;
+                } 
+                
+                // JIKA PESANAN BARU (ADMIN LANGSUNG INPUT DI KASIR)
+                else {
+                    $todayQueue = Bill::whereDate('created_at', now())->count() + 1;
+
+                    $newBill = Bill::create([
+                        'code' => (string) Str::uuid(),
+                        'queue_number' => $todayQueue,
+                        'user_id' => Auth::id() ?? 1,
+                        'service_type' => $request->service_type ?? 'dine_in',
+                        'payment_method' => $request->payment_method,
+                        'amount_paid' => (int) $request->amount_paid,
+                        'change' => (int) ($request->change ?? 0), 
+                        'total_price' => (int) $request->total_price,
+                        'status' => 'completed',
+                        'date' => now(),
+                    ]);
+
+                    $items = is_string($request->items) ? json_decode($request->items, true) : $request->items;
+                    foreach ($items as $item) {
+                        OrderedMenu::create([
+                            'bill_id' => $newBill->id,
+                            'menu_id' => $item['id'],
+                            'quantity' => $item['quantity'],
+                            'total_price' => $item['price'] * $item['quantity'],
+                        ]);
+
+                        // Tambahkan count_sold untuk pesanan baru admin
+                        \App\Models\Menu::where('id', $item['id'])
+                            ->increment('count_sold', $item['quantity']);
+                    }
+
+                    if ($proofPath) {
+                        \App\Models\ProofTransferPayment::create([
+                            'bill_id' => $newBill->id,
+                            'image' => $proofPath,
+                        ]);
+                    }
+
+                    event(new \App\Events\DataUpdated('menu_updated'));
+                    return $newBill;
+                }
             });
 
             return response()->json([
                 'status' => 'success', 
                 'bill_id' => $bill->id,
-                'queue_number' => $bill->queue_number, // <--- INI WAJIB ADA
+                'queue_number' => $bill->queue_number,
                 'payment_proof_url' => $proofPath ? asset('storage/' . $proofPath) : null
             ]);
 
         } catch (\Exception $e) {
             return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
-    }
-
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
     }
 }

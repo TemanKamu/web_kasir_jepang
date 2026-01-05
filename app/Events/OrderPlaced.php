@@ -5,32 +5,54 @@ namespace App\Events;
 use App\Models\Bill;
 use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\InteractsWithSockets;
-use Illuminate\Broadcasting\PresenceChannel;
-use Illuminate\Broadcasting\PrivateChannel;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcast;
+use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 
 class OrderPlaced implements ShouldBroadcastNow
 {
     use Dispatchable, InteractsWithSockets, SerializesModels;
 
-    public $cartGroup; // Properti harus PUBLIC
+    // Properti harus public agar bisa diserialisasi oleh Pusher/Echo
+    public $bill;
 
-    public function __construct($cartGroup)
+    /**
+     * Create a new event instance.
+     *
+     * @param  \App\Models\Bill  $bill
+     */
+    public function __construct(Bill $bill)
     {
-        // Gunakan load agar data menu ikut terkirim
-        $this->cartGroup = $cartGroup->load('items.menu');
+        // Load relasi orderedMenus (bukan items) agar data menu ikut terkirim ke kasir
+        $this->bill = $bill->load('orderedMenus.menu');
     }
 
+    /**
+     * Get the channels the event should broadcast on.
+     *
+     * @return array<int, \Illuminate\Broadcasting\Channel>
+     */
     public function broadcastOn(): array
     {
-        return [new \Illuminate\Broadcasting\Channel('orders')];
+        // Channel yang didengarkan oleh Admin/Kasir
+        return [new Channel('orders')];
     }
 
+    /**
+     * Nama event yang didengarkan di JavaScript (.listen('.new-order', ...))
+     */
     public function broadcastAs()
     {
         return 'new-order';
+    }
+
+    /**
+     * (Opsional) Menentukan data spesifik yang dikirim
+     */
+    public function broadcastWith()
+    {
+        return [
+            'bill' => $this->bill
+        ];
     }
 }

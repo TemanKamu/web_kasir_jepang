@@ -880,24 +880,37 @@
                                     <span class="bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-xs font-bold" x-text="'#' + currentQueueNumber"></span>
                                 </template>
                             </div>
-                            <p class="text-xs text-gray-400 font-bold uppercase tracking-widest" x-text="currentServiceType.replace('_', ' ')"></p>
+                            <p class="text-xs text-gray-400 font-bold uppercase tracking-widest" x-text="currentServiceType ? currentServiceType.replace('_', ' ') : 'DINE IN'"></p>
                         </div>
                     </div>
+                    {{-- Tombol Reset jika sedang memproses pesanan orang lain --}}
+                    <template x-if="currentBillId">
+                        <button @click="resetCart()" class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors">
+                            <i class="fas fa-sync-alt"></i>
+                        </button>
+                    </template>
                 </div>
 
                 {{-- LIST ITEM KERANJANG --}}
                 <div class="flex-1 overflow-y-auto px-7 py-2 space-y-4">
-                    <template x-for="item in cart" :key="item.id">
+                    {{-- Logic: Loop cart (untuk input kasir) ATAU ordered_menus (untuk pesanan masuk) --}}
+                    <template x-for="(item, index) in cart" :key="index">
                         <div class="flex items-center gap-4 bg-gray-50 p-4 rounded-[2rem]">
-                            <img :src="item.image || '/images/default-food.png'" class="w-16 h-16 rounded-full object-cover shadow-sm">
+                            {{-- Penyesuaian akses image: item.image (kasir) atau item.menu.image (dari bill) --}}
+                            <img :src="(item.menu ? item.menu.image : item.image) || '/images/default-food.png'" 
+                                class="w-16 h-16 rounded-full object-cover shadow-sm">
+                            
                             <div class="flex-1">
-                                <h4 class="font-bold text-[#1e3a8a] text-sm" x-text="item.name"></h4>
+                                {{-- Penyesuaian akses nama: item.name (kasir) atau item.menu.name (dari bill) --}}
+                                <h4 class="font-bold text-[#1e3a8a] text-sm" x-text="item.menu ? item.menu.name : item.name"></h4>
                                 <p class="text-xs font-bold text-gray-400" x-text="formatRupiah(item.price)"></p>
                             </div>
+
                             <div class="flex items-center gap-3 bg-white px-3 py-1 rounded-full border border-gray-100">
-                                <button @click="updateQuantity(item.id, -1)" class="text-gray-400 hover:text-red-500 font-black">-</button>
+                                {{-- Jika pesanan dari customer, biasanya admin hanya konfirmasi, tapi jika ingin edit bisa pakai updateQuantity --}}
+                                <button @click="updateQuantity(item.id || item.menu_id, -1)" class="text-gray-400 hover:text-red-500 font-black">-</button>
                                 <span class="font-bold text-sm w-4 text-center" x-text="item.quantity"></span>
-                                <button @click="updateQuantity(item.id, 1)" class="text-blue-500 font-black">+</button>
+                                <button @click="updateQuantity(item.id || item.menu_id, 1)" class="text-blue-500 font-black">+</button>
                             </div>
                         </div>
                     </template>
@@ -909,25 +922,26 @@
                     </div>
                 </div>
 
-                {{-- PAYMENT SECTION (Hanya muncul jika ada item) --}}
+                {{-- PAYMENT SECTION --}}
                 <div x-show="cart.length > 0" x-cloak class="px-7 py-4 bg-gray-50 border-t border-b border-gray-100 space-y-3">
                     <div>
                         <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Payment Method</label>
                         <div class="flex gap-2 mt-1">
-                            <button @click="paymentMethod = 'cash'; paymentProof = null" 
+                            <button @click="paymentMethod = 'cash'" 
                                 :class="paymentMethod === 'cash' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
-                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">CASH</button>
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all uppercase">Cash</button>
                             <button @click="paymentMethod = 'qris'" 
-                                :class="paymentMethod === 'qriss' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
-                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">QRIS</button>
+                                :class="paymentMethod === 'qris' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all uppercase">QRIS</button>
                             <button @click="paymentMethod = 'transfer'" 
-                                :class="paymentMethod === 'ewallet' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
-                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all">TRANSFER</button>
+                                :class="paymentMethod === 'transfer' ? 'bg-[#1e3a8a] text-white' : 'bg-white text-gray-400'"
+                                class="flex-1 py-2 rounded-xl text-xs font-bold border border-gray-100 shadow-sm transition-all uppercase">Transfer</button>
                         </div>
                     </div>
 
+                    {{-- Upload Bukti jika non-cash --}}
                     <div x-show="paymentMethod !== 'cash'" x-transition class="space-y-1">
-                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Payment Proof (Image)</label>
+                        <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Payment Proof</label>
                         <div class="relative h-20 w-full border-2 border-dashed border-gray-200 rounded-xl flex items-center justify-center overflow-hidden bg-white">
                             <template x-if="!paymentProofPreview">
                                 <div class="text-center">
@@ -938,16 +952,14 @@
                             <template x-if="paymentProofPreview">
                                 <img :src="paymentProofPreview" class="h-full w-full object-cover">
                             </template>
-                            <input type="file" @change="handleFileUpload($event)" 
-                                class="absolute inset-0 opacity-0 cursor-pointer">
+                            <input type="file" @change="handleFileUpload($event)" class="absolute inset-0 opacity-0 cursor-pointer">
                         </div>
                     </div>
 
                     <div class="flex gap-3">
                         <div class="flex-1">
                             <label class="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">Amount Paid</label>
-                            <input type="number" x-model="amountPaid" :disabled="paymentMethod === 'qriss'"
-                                :class="paymentMethod === 'qriss' ? 'bg-gray-100' : 'bg-white'"
+                            <input type="number" x-model="amountPaid" 
                                 class="w-full mt-1 px-4 py-2 rounded-xl border border-gray-200 outline-none font-bold text-[#1e3a8a]">
                         </div>
                         <div class="flex-1">
@@ -970,7 +982,7 @@
                         <button :disabled="cart.length === 0 || (paymentMethod === 'cash' && amountPaid < totalPrice)" 
                                 @click="checkout()"
                                 class="bg-white text-[#2d8aff] px-10 py-4 rounded-[1.8rem] font-black text-xl hover:scale-105 active:scale-95 transition-transform">
-                            Order
+                            Confirm
                         </button>
                     </div>
                 </div>
@@ -979,28 +991,45 @@
     </div>
     {{-- Script untuk mendengarkan event real-time --}}
    <script type="module">
-    function startListening() {
+        function startListening() {
             if (window.Echo) {
                 console.log('Echo Connected. Listening for orders...');
 
-                // 1. Channel Lama Lu (Untuk Sinkronisasi Data Umum)
+                // 1. Sinkronisasi Data Umum
                 window.Echo.channel('pos-data-channel')
                     .listen('.data.changed', (e) => {
                         console.log('Data changed, reloading...');
                         window.location.reload();
                     });
 
-                // 2. Channel Baru Untuk Pesanan Real-time (Kasir)
+                // 2. Channel Pesanan Baru
                 window.Echo.channel('orders')
-                .listen('.new-order', (data) => {
-                    console.log('Echo catch:', data);
-                    if (data.cartGroup) {
-                        // Gunakan delay kecil untuk memastikan Alpine siap menerima
-                        setTimeout(() => {
+                    .listen('.new-order', (data) => {
+                        console.log('Echo catch:', data.bill);
+                        if (data.bill) {
+                            // Kirim CustomEvent agar ditangkap oleh listener window
                             window.dispatchEvent(new CustomEvent('incoming-order', { 
-                                detail: data.cartGroup 
+                                detail: data.bill 
                             }));
-                        }, 100);
+                        }
+                    });
+
+                // 3. Listener untuk menghubungkan Echo ke Alpine.js
+                window.addEventListener('incoming-order', (e) => {
+                    const bill = e.detail;
+
+                    /** * SOLUSI: 
+                     * Kita tidak bisa pakai 'this' di sini. 
+                     * Kita harus mencari object Alpine menggunakan proxy.
+                     */
+                    const alpineRoot = document.querySelector('[x-data]');
+                    if (alpineRoot && alpineRoot.__x) {
+                        // Panggil fungsi receiveOrder yang ada di dalam adminApp()
+                        alpineRoot.__x.$data.receiveOrder(bill);
+                    } else {
+                        // Jika cara di atas gagal (tergantung versi Alpine), gunakan dispatch event biasa
+                        // Alpine akan menangkap ini jika di x-data ada @incoming-order.window="receiveOrder($event.detail)"
+                        console.log('Alpine not ready, data sent via event');
                     }
                 });
 
@@ -1016,7 +1045,6 @@
         function adminApp(){
             return {
                  // --- STATE CRUD & UI ---
-                // --- UI & Management State ---
                 search: '',
                 openAdd: false, 
                 openDetail: false, 
@@ -1033,20 +1061,20 @@
 
                 // --- POS / Transaction State ---
                 cart: [],
-                currentCartGroupId: null, // ID dari keranjang customer (null jika pesanan langsung admin)
-                currentQueueNumber: null, // Nomor antrian pesanan yang sedang aktif
-                currentServiceType: 'dine_in', // Default service type
+                currentBillId: null, // Berubah dari currentCartGroupId ke currentBillId
+                currentQueueNumber: null,
+                currentServiceType: 'dine_in',
                 showServiceModal: false,
 
                 // --- Payment Input State ---
-                paymentMethod: 'cash', // 'cash', 'qris', atau 'transfer'
+                paymentMethod: 'cash',
                 amountPaid: 0,
-                paymentProof: null,        // Menyimpan file blob gambar
-                paymentProofPreview: null, // Menyimpan URL preview gambar untuk UI
+                paymentProof: null,
+                paymentProofPreview: null,
 
                 // --- Receipt / Struk State ---
-                showReceipt: false, // Control modal struk
-                receiptData: {      // KUNCI: Data statis untuk struk agar tidak berubah saat cart di-reset
+                showReceipt: false,
+                receiptData: {
                     items: [],
                     total: 0,
                     pay: 0,
@@ -1056,7 +1084,17 @@
                     date: '',
                     service_type: ''
                 },
-
+                init() {
+                    // Cek apakah ada data bill dari session Laravel
+                    @if(session('process_bill'))
+                        const billData = @json(session('process_bill'));
+                        // Gunakan fungsi receiveOrder yang sudah kita buat sebelumnya
+                        // Gunakan setTimeout agar Alpine benar-benar siap
+                        setTimeout(() => {
+                            this.receiveOrder(billData);
+                        }, 500);
+                    @endif
+                },
                 handleFileUpload(event) {
                     const file = event.target.files[0];
                     if (file) {
@@ -1064,30 +1102,37 @@
                         this.paymentProofPreview = URL.createObjectURL(file);
                     }
                 },
-               receiveOrder(cartGroup) {
-                    console.log('Alpine menerima data:', cartGroup);
-                    this.currentCartGroupId = cartGroup.id;
-                    this.currentQueueNumber = cartGroup.queue_number;
-                    this.currentServiceType = cartGroup.service_type;
+
+                // --- FUNGSI MENERIMA PESANAN REAL-TIME ---
+                receiveOrder(bill) { // Parameter sekarang adalah object 'bill'
+                    console.log('Alpine menerima data Bill:', bill);
+                    this.currentBillId = bill.id;
+                    this.currentQueueNumber = bill.queue_number;
+                    this.currentServiceType = bill.service_type;
                     this.amountPaid = 0; 
 
-                    if (cartGroup.items) {
-                        this.cart = cartGroup.items.map(item => ({
+                    // Mapping dari ordered_menus (Model Bill) ke format Cart Alpine
+                    if (bill.ordered_menus) {
+                        this.cart = bill.ordered_menus.map(item => ({
                             id: item.menu_id,
                             name: item.menu ? item.menu.name : 'Unknown',
-                            price: item.price,
+                            // Harga per item didapat dari total_price / quantity
+                            price: item.total_price / item.quantity, 
                             image: item.menu ? item.menu.image_url : '',
                             quantity: item.quantity
                         }));
                     }
+                    
+                    window.dispatchEvent(new CustomEvent('notify', { 
+                        detail: { message: `Pesanan Baru #${bill.queue_number} Masuk!`, type: 'success' } 
+                    }));
                 },
                 calculateChange() {
-                    // Jika bukan cash, kembalian selalu 0
                     if (this.paymentMethod !== 'cash') return 0;
-                    
                     let change = this.amountPaid - this.totalPrice;
                     return change > 0 ? change : 0;
                 },
+
                 get totalItems() {
                     return this.cart.reduce((sum, item) => sum + item.quantity, 0);
                 },
@@ -1095,7 +1140,7 @@
                 get totalPrice() {
                     return this.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
                 },
-                // --- HELPER FUNCTIONS ---
+
                 getCsrf() {
                     const tag = document.querySelector('meta[name=csrf-token]');
                     return tag ? tag.getAttribute('content') : '';
@@ -1111,12 +1156,11 @@
 
                 // --- CART LOGIC ---
                 addToCart(menu) {
-                    // Jika sebelumnya kosong, pastikan ID adalah null (Pesanan Baru Admin)
-                    if (this.cart.length === 0) {
-                        this.currentCartGroupId = null; 
+                    // Jika manual input, pastikan ID bill kosong agar jadi transaksi baru
+                    if (!this.currentBillId) {
+                        this.currentBillId = null; 
                     }
 
-                    // Logika tambah ke cart seperti biasa...
                     let existing = this.cart.find(i => i.id === menu.id);
                     if (existing) {
                         existing.quantity++;
@@ -1125,7 +1169,7 @@
                             id: menu.id,
                             name: menu.name,
                             price: menu.price,
-                            image: menu.image_url,
+                            image: menu.image_url, // Sesuaikan dengan properti image di model Menu
                             quantity: 1
                         });
                     }
@@ -1141,64 +1185,76 @@
                         item.quantity += delta;
                         if (item.quantity < 1) {
                             this.cart = this.cart.filter(i => i.id !== id);
+                            // Jika item habis, reset ID bill jika ini tadinya pesanan masuk
+                            if(this.cart.length === 0) this.resetCart();
                         }
                     }
                 },
+                resetCart() {
+                    this.cart = [];
+                    this.currentBillId = null;
+                    this.currentQueueNumber = null;
+                    this.amountPaid = 0;
+                    this.paymentProof = null;
+                    this.paymentProofPreview = null;
+                    this.paymentMethod = 'cash';
+                },
                 // --- CHECKOUT LOGIC ---
                 async checkout() {
-                    
+                 if (this.cart.length === 0) return;
                     try {
-                        // Tentukan orderId (ID keranjang customer atau 'null' untuk admin)
-                        const orderId = this.currentCartGroupId || 'null';
-                        // Di dalam fungsi checkout()
+                        // Gunakan ID bill jika ada, jika tidak pakai string 'null' (untuk transaksi baru di kasir)
+                        const billId = this.currentBillId || 'null';
                         let formData = new FormData();
 
-                        // Pastikan calculateChange() dipanggil dan hasilnya angka
                         const kembalian = this.calculateChange(); 
 
                         formData.append('payment_method', this.paymentMethod);
                         formData.append('total_price', this.totalPrice);
                         formData.append('amount_paid', this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid);
-                        formData.append('change', kembalian); // Pastikan ini terkirim
+                        formData.append('change', kembalian);
+                        formData.append('service_type', this.currentServiceType);
                         formData.append('items', JSON.stringify(this.cart));
+                        
                         if (this.paymentProof) {
                             formData.append('payment_proof', this.paymentProof);
                         }
-                        const response = await fetch(`/orders/confirm-cart/${orderId}`, {
+
+                        const response = await fetch(`/orders/confirm-cart/${billId}`, {
                             method: 'POST',
                             headers: {
-                                'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content
+                                'X-CSRF-TOKEN': this.getCsrf()
                             },
-                            body: formData // formData yang sudah kamu buat sebelumnya
+                            body: formData
                         });
 
                         const result = await response.json();
 
                         if (response.ok) {
-                            // --- KUNCI PERBAIKAN DI SINI ---
-                            // Simpan data ke receiptData SEBELUM cart di-reset
+                            // Simpan data untuk Struk
                             this.receiptData = {
-                                items: [...this.cart], // Copy isi cart
+                                items: [...this.cart],
                                 total: this.totalPrice,
                                 pay: this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid,
-                                change: this.calculateChange(),
-                                queue: this.currentQueueNumber || result.queue_number,
-                                method: this.paymentMethod
+                                change: kembalian,
+                                queue: result.queue_number,
+                                method: this.paymentMethod,
+                                date: new Date().toLocaleString('id-ID'),
+                                service_type: this.currentServiceType
                             };
 
-                            // Munculkan Modal
                             this.showReceipt = true;
-
-                            // Reset Keranjang & Input (Sekarang aman karena struk pakai receiptData)
-                            this.cart = [];
-                            this.currentCartGroupId = null;
-                            this.currentQueueNumber = null;
-                            this.amountPaid = 0;
-                            this.paymentProof = null;
-                            this.paymentProofPreview = null;
+                            this.resetCart();
+                            
+                            window.dispatchEvent(new CustomEvent('notify', { 
+                                detail: { message: 'Transaksi Berhasil!', type: 'success' } 
+                            }));
+                        } else {
+                            throw new Error(result.message || 'Terjadi kesalahan');
                         }
                     } catch (error) {
                         console.error(error);
+                        alert("Gagal memproses transaksi: " + error.message);
                     }
                 },
                 // --- CRUD FUNCTIONS (EXISTING) ---

@@ -204,6 +204,13 @@
                                             <button @click="openDetail({{ json_encode($bill) }})" title="View Details" class="w-9 h-9 flex items-center justify-center bg-blue-50 text-blue-400 rounded-xl hover:bg-blue-500 hover:text-white transition-all">
                                                 <i class="fas fa-eye text-xs"></i>
                                             </button>
+                                            @if($bill->status === 'pending')
+                                                <a href="{{ route('bills.process', $bill->id) }}" 
+                                                title="Process to POS" 
+                                                class="w-9 h-9 flex items-center justify-center bg-orange-50 text-orange-500 rounded-xl hover:bg-orange-500 hover:text-white transition-all shadow-sm border border-orange-100">
+                                                    <i class="fas fa-cash-register text-xs"></i>
+                                                </a>
+                                            @endif
                                             @if($bill->status !== 'cancelled')
                                                 {{-- Tombol Aktif --}}
                                                 <form action="{{ route('bills.destroy', $bill->id) }}" method="POST" 
