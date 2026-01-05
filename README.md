@@ -41,3 +41,66 @@ Ikuti langkah-langkah berikut untuk menjalankan project di lokal:
    ```bash
    git clone [https://github.com/username/kaisei-pos.git](https://github.com/username/kaisei-pos.git)
    cd kaisei-pos
+2. **Install Dependensi**
+   Instal semua paket PHP dan JavaScript yang diperlukan.
+   ```bash
+   composer install
+   npm install
+3. **Konfigurasi Environment Salin file**
+   .env.example menjadi .env dan sesuaikan pengaturan database serta broadcast driver.
+    ```bash
+    cp .env.example .env
+    php artisan key:generate
+4. **Hubungkan Storage**
+Jalankan perintah ini untuk membuat struktur tabel dan mengisi data role (Admin & Customer).
+   ```bash
+   php artisan storage:link
+5. **Jalankan Aplikasi**
+   Buka terminal dan jalankan server lokal Laravel:
+   ```bash
+   php artisan serve
+   php artisan reverb:start
+   npm run dev
+# 📦 Sistem Pemesanan & Kasir (Laravel)
+
+## 📁 Struktur Penting Proyek
+
+Berikut adalah file dan folder utama yang memegang peran penting dalam alur sistem:
+
+- `app/Http/Controllers/OrderController.php`  
+  Mengatur logika inti alur pemesanan, konfirmasi pesanan, dan interaksi kasir.
+
+- `app/Http/Controllers/UserController.php`  
+  Menangani manajemen pengguna serta validasi role (hak akses) yang unik.
+
+- `app/Models/Bill.php`  
+  Menyimpan data transaksi, sistem antrean, dan status pembayaran.
+
+- `resources/views/Dashboard/user.blade.php`  
+  Tampilan frontend untuk manajemen user menggunakan **Alpine.js**.
+
+---
+
+## ⚡ Cara Kerja Real-Time (Laravel Reverb)
+
+Proyek ini menggunakan **Laravel Reverb** untuk sinkronisasi data secara real-time tanpa refresh halaman.
+
+### Alur Kerja:
+1. Pelanggan melakukan konfirmasi pesanan melalui **Tablet**.
+2. Server memicu event `OrderPlaced`.
+3. Kasir menerima notifikasi pesanan baru secara otomatis di dashboard **tanpa reload halaman**.
+
+---
+
+## 🛠 Teknologi Utama
+- Laravel
+- Laravel Reverb (Real-time Event)
+- Alpine.js
+- Blade Template
+
+---
+
+## 🎯 Tujuan Sistem
+- Mempercepat alur pemesanan
+- Menghilangkan kebutuhan refresh manual
+- Sinkronisasi data instan antara pelanggan dan kasir
