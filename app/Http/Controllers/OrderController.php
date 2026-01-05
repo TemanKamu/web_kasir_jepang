@@ -13,25 +13,6 @@ use Illuminate\Support\Facades\Log;
 
 class OrderController extends Controller
 {
-    /**
-     * Display a listing of the resource.
-     */
-    public function index()
-    {
-        //
-    }
-
-    /**
-     * Show the form for creating a new resource.
-     */
-    public function create()
-    {
-        //
-    }
-
-    /**
-     * Store a newly created resource in storage.
-     */
     // OrderController.php
     public function store(Request $request) 
     {
@@ -69,46 +50,46 @@ class OrderController extends Controller
         }
     }
 
-    public function confirmCart(Request $request, $id)
+    public function confirmCart(Request $request, $id = null)
     {
         try {
             $proofPath = null;
-
-            // 1. Cek File Bukti Bayar
             if ($request->payment_method !== 'cash') {
                 if (!$request->hasFile('payment_proof')) {
-                    return response()->json(['status' => 'error', 'message' => 'Bukti transfer/QRIS wajib diunggah!'], 422);
+                    return response()->json(['status' => 'error', 'message' => 'Bukti bayar wajib ada!'], 422);
                 }
                 $proofPath = $request->file('payment_proof')->store('payment_proofs', 'public');
             }
 
+            // Simpan hasil transaction ke variabel $bill
             $bill = DB::transaction(function () use ($request, $id, $proofPath) {
-                $cartGroup = \App\Models\CartGroup::with('items')->findOrFail($id);
+                if ($id && $id !== 'null') {
+                    $cartGroup = \App\Models\CartGroup::findOrFail($id);
+                    $queueNumber = $cartGroup->queue_number;
+                    $serviceType = $cartGroup->service_type;
+                    $cartGroup->update(['status' => 'confirmed']);
+                } 
+                else {
+                    // Perbaikan: Ambil nomor antrian terbaru dari Bill atau CartGroup hari ini
+                    $countCart = \App\Models\CartGroup::whereDate('created_at', now())->count();
+                    $countBill = \App\Models\Bill::whereDate('created_at', now())->count();
+                    $queueNumber = max($countCart, $countBill) + 1;
+                    $serviceType = $request->service_type ?? 'dine_in';
+                }
 
-                // 2. Buat Bill Final
                 $newBill = \App\Models\Bill::create([
                     'code' => (string) \Illuminate\Support\Str::uuid(),
-                    'queue_number' => $cartGroup->queue_number,
+                    'queue_number' => $queueNumber,
                     'user_id' => Auth::id() ?? 1,
-                    'service_type' => $cartGroup->service_type,
+                    'service_type' => $serviceType,
                     'payment_method' => $request->payment_method,
-                    'amount_paid' => $request->amount_paid,
-                    'change' => $request->change,
-                    'total_price' => $request->total_price,
+                    'amount_paid' => (int) $request->amount_paid,
+                    'change' => (int) ($request->change ?? 0), 
+                    'total_price' => (int) $request->total_price,
                     'status' => 'completed',
                     'date' => now(),
                 ]);
 
-                // 3. LOGIKA BARU: Input ke tabel proof_transfer_payments
-                if ($proofPath) {
-                    \App\Models\ProofTransferPayment::create([
-                        'bill_id' => $newBill->id,
-                        'image' => $proofPath, // sesuaikan nama kolom di tabel kamu (misal: proof_image atau image)
-                        // tambahkan field lain jika ada, misal: 'amount' => $request->amount_paid
-                    ]);
-                }
-
-                // 4. Pindahkan item ke OrderedMenu
                 $items = is_string($request->items) ? json_decode($request->items, true) : $request->items;
                 foreach ($items as $item) {
                     \App\Models\OrderedMenu::create([
@@ -119,24 +100,18 @@ class OrderController extends Controller
                     ]);
                 }
 
-                // 5. Update status CartGroup
-                $cartGroup->update(['status' => 'confirmed']);
-
                 return $newBill;
             });
 
             return response()->json([
                 'status' => 'success', 
-                'message' => 'Pembayaran Berhasil!',
                 'bill_id' => $bill->id,
+                'queue_number' => $bill->queue_number, // <--- INI WAJIB ADA
                 'payment_proof_url' => $proofPath ? asset('storage/' . $proofPath) : null
             ]);
 
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error', 
-                'message' => $e->getMessage()
-            ], 500);
+            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
         }
     }
 

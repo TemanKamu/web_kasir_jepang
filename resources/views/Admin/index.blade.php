@@ -4,11 +4,12 @@
     <meta charset="UTF-8">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kaisei POS - Full Layout</title>
+    <title>Kaisei POS - Menu</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <script src="https://cdn.tailwindcss.com"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <link rel="icon" type="image/x-icon" href="{{ asset('image/Logo.png') }}">
     <style>
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
@@ -91,63 +92,40 @@
             class="bg-white w-full max-w-sm rounded-3xl overflow-hidden shadow-2xl transform transition-all">
             
             <div id="receipt-print" class="p-8 bg-white text-gray-800 font-mono text-sm">
-                <div class="text-center mb-6">
-                    <h3 class="text-2xl font-black text-[#1e3a8a] mb-1">KAISEI POS</h3>
-                    <p class="text-[10px] text-gray-400 leading-tight">Jl. Contoh Alamat Resto No. 123<br>Telp: 0812-3456-7890</p>
+                <div class="text-center mb-4">
+                    <h3 class="text-xl font-bold">KAISEI POS</h3>
+                    <p class="text-[10px]">No. Antrian: <span x-text="'#' + receiptData.queue"></span></p>
                 </div>
 
-                <div class="border-b border-dashed border-gray-200 pb-4 mb-4 space-y-1">
-                    <div class="flex justify-between uppercase text-[10px] font-bold">
-                        <span>No. Antrian:</span>
-                        <span class="text-blue-600" x-text="'#' + lastBill.queue_number"></span>
-                    </div>
-                    <div class="flex justify-between text-[10px]">
-                        <span x-text="new Date().toLocaleString('id-ID')"></span>
-                        <span x-text="lastBill.payment_method?.toUpperCase()"></span>
-                    </div>
-                </div>
-
-                <div class="space-y-3 mb-6 border-b border-dashed border-gray-200 pb-4">
-                    <template x-for="item in cart" :key="item.id">
-                        <div class="flex flex-col mb-2">
-                            <div class="flex justify-between items-start text-sm">
-                                <span class="font-bold flex-1 pr-2" x-text="item.name"></span>
-                                <span class="font-bold whitespace-nowrap" x-text="formatRupiah(item.price * item.quantity)"></span>
+                <div class="space-y-2 mb-4 border-b border-dashed pb-2">
+                    <template x-for="item in receiptData.items" :key="item.id">
+                        <div class="flex justify-between">
+                            <div>
+                                <div class="font-bold" x-text="item.name"></div>
+                                <div class="text-[10px]" x-text="item.quantity + ' x ' + formatRupiah(item.price)"></div>
                             </div>
-                            <div class="text-[10px] text-gray-500 italic">
-                                <span x-text="item.quantity"></span> x <span x-text="formatRupiah(item.price)"></span>
-                            </div>
+                            <div x-text="formatRupiah(item.price * item.quantity)"></div>
                         </div>
                     </template>
                 </div>
 
-                <div class="space-y-1 text-sm">
-                    <div class="flex justify-between">
-                        <span>Subtotal</span>
-                        <span x-text="formatRupiah(totalPrice)"></span>
-                    </div>
-                    <div class="flex justify-between font-bold text-lg border-t border-gray-100 pt-2 mt-2">
+                <div class="space-y-1 text-xs">
+                    <div class="flex justify-between font-bold text-sm">
                         <span>TOTAL</span>
-                        <span class="text-[#1e3a8a]" x-text="formatRupiah(totalPrice)"></span>
+                        <span x-text="formatRupiah(receiptData.total)"></span>
                     </div>
-                    
-                    <div class="flex justify-between text-xs mt-4 pt-4 border-t border-dashed border-gray-200">
+                    <div class="flex justify-between">
+                        <span>BAYAR</span>
+                        <span x-text="formatRupiah(receiptData.pay)"></span>
+                    </div>
+                    <div class="flex justify-between text-green-600 font-bold">
+                        <span>KEMBALI</span>
+                        <span x-text="formatRupiah(receiptData.change)"></span>
+                    </div>
+                    <div class="flex justify-between pt-2">
                         <span>Metode:</span>
-                        <span class="font-bold uppercase" x-text="lastBill.payment_method"></span>
+                        <span class="uppercase" x-text="receiptData.method"></span>
                     </div>
-                    <div class="flex justify-between text-xs">
-                        <span>Bayar:</span>
-                        <span x-text="formatRupiah(amountPaid)"></span>
-                    </div>
-                    <div class="flex justify-between text-xs font-bold text-green-600">
-                        <span>Kembali:</span>
-                        <span x-text="formatRupiah(calculateChange())"></span>
-                    </div>
-                </div>
-
-                <div class="text-center mt-8 text-[10px] text-gray-400">
-                    <p>Terima kasih atas kunjungan Anda!</p>
-                    <p class="mt-1 italic">Simpan struk ini sebagai bukti pembayaran.</p>
                 </div>
             </div>
 
@@ -700,13 +678,25 @@
                     <i class="fas fa-th-large text-xl"></i>
                     <span class="text-[11px] font-bold mt-1 uppercase">Dashboard</span>
                 </div>
-                <div class="flex flex-col items-center justify-center w-28 h-16 bg-white text-gray-400 border border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50">
+                <div class="flex flex-col items-center justify-center w-28 h-16 bg-white text-gray-400 border border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50" @click="window.location.href='{{ route('bills.index') }}'">
                     <i class="fas fa-receipt text-xl"></i>
                     <span class="text-[11px] font-bold mt-1 uppercase">Bill</span>
                 </div>
-                <div class="flex flex-col items-center justify-center w-28 h-16 bg-white text-gray-400 border border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50">
+                <div class="flex flex-col items-center justify-center w-28 h-16 bg-white text-gray-400 border border-gray-100 rounded-2xl cursor-pointer hover:bg-gray-50" @click="window.location.href='{{ route('users.index') }}'">
                     <i class="fas fa-user text-xl"></i>
                     <span class="text-[11px] font-bold mt-1 uppercase">User</span>
+                </div>
+                <div class="flex items-center gap-4 ml-auto">
+                    <div class="text-right mr-2">
+                        <p class="text-xs font-bold text-gray-800">{{ Auth::user()->name ?? 'Admin Name' }}</p>
+                        <p class="text-[10px] text-gray-400 uppercase tracking-widest">Administrator</p>
+                    </div>
+                    <form action="{{ route('logout') }}" method="POST">
+                        @csrf
+                        <button type="submit" class="w-12 h-12 flex items-center justify-center bg-red-50 text-red-500 rounded-2xl hover:bg-red-500 hover:text-white transition-all shadow-sm">
+                            <i class="fas fa-sign-out-alt text-xl"></i>
+                        </button>
+                    </form>
                 </div>
             </div>
         </header>
@@ -1026,6 +1016,7 @@
         function adminApp(){
             return {
                  // --- STATE CRUD & UI ---
+                // --- UI & Management State ---
                 search: '',
                 openAdd: false, 
                 openDetail: false, 
@@ -1040,23 +1031,31 @@
                 openEditSub: false,
                 editSubData: { name: '', id: '', category_id: '' },
 
-                // --- STATE CART & ORDER ---
+                // --- POS / Transaction State ---
                 cart: [],
-                currentCartGroupId: null, // Untuk melacak keranjang mana yang sedang diproses
-                currentQueueNumber: null, // TAMBAHKAN INI
-                currentServiceType: '',   // TAMBAHKAN INI
+                currentCartGroupId: null, // ID dari keranjang customer (null jika pesanan langsung admin)
+                currentQueueNumber: null, // Nomor antrian pesanan yang sedang aktif
+                currentServiceType: 'dine_in', // Default service type
                 showServiceModal: false,
 
-                // PAYMENT STATE
-                paymentMethod: 'cash',
+                // --- Payment Input State ---
+                paymentMethod: 'cash', // 'cash', 'qris', atau 'transfer'
                 amountPaid: 0,
+                paymentProof: null,        // Menyimpan file blob gambar
+                paymentProofPreview: null, // Menyimpan URL preview gambar untuk UI
 
-                // Bill
-                showReceipt: false,
-                lastBill: {},
-                // State Bukti Pembayaran
-                paymentProof: null,
-                paymentProofPreview: null,
+                // --- Receipt / Struk State ---
+                showReceipt: false, // Control modal struk
+                receiptData: {      // KUNCI: Data statis untuk struk agar tidak berubah saat cart di-reset
+                    items: [],
+                    total: 0,
+                    pay: 0,
+                    change: 0,
+                    queue: null,
+                    method: '',
+                    date: '',
+                    service_type: ''
+                },
 
                 handleFileUpload(event) {
                     const file = event.target.files[0];
@@ -1083,7 +1082,9 @@
                     }
                 },
                 calculateChange() {
+                    // Jika bukan cash, kembalian selalu 0
                     if (this.paymentMethod !== 'cash') return 0;
+                    
                     let change = this.amountPaid - this.totalPrice;
                     return change > 0 ? change : 0;
                 },
@@ -1110,9 +1111,15 @@
 
                 // --- CART LOGIC ---
                 addToCart(menu) {
-                    const existingItem = this.cart.find(item => item.id === menu.id);
-                    if (existingItem) {
-                        existingItem.quantity++;
+                    // Jika sebelumnya kosong, pastikan ID adalah null (Pesanan Baru Admin)
+                    if (this.cart.length === 0) {
+                        this.currentCartGroupId = null; 
+                    }
+
+                    // Logika tambah ke cart seperti biasa...
+                    let existing = this.cart.find(i => i.id === menu.id);
+                    if (existing) {
+                        existing.quantity++;
                     } else {
                         this.cart.push({
                             id: menu.id,
@@ -1122,10 +1129,6 @@
                             quantity: 1
                         });
                     }
-                    // Kirim notifikasi sukses
-                    window.dispatchEvent(new CustomEvent('notify', { 
-                        detail: { message: menu.name + ' ditambahkan!', type: 'success' } 
-                    }));
                 },
 
                 removeFromCart(id) {
@@ -1143,38 +1146,54 @@
                 },
                 // --- CHECKOUT LOGIC ---
                 async checkout() {
-                    // Validasi tambahan untuk QRIS
-                    if (this.paymentMethod === 'qriss' && !this.paymentProof) {
-                        alert('Silakan upload bukti pembayaran QRIS terlebih dahulu!');
-                        return;
-                    }
-
-                    // Karena ada file, kita gunakan FormData
-                    let formData = new FormData();
-                    formData.append('cart_group_id', this.currentCartGroupId);
-                    formData.append('payment_method', this.paymentMethod);
-                    formData.append('total_price', this.totalPrice);
-                    formData.append('amount_paid', this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid);
-                    formData.append('change', this.calculateChange());
-                    formData.append('items', JSON.stringify(this.cart));
                     
-                    if (this.paymentProof) {
-                        formData.append('payment_proof', this.paymentProof);
-                    }
-
                     try {
-                        const response = await fetch(`/orders/confirm-cart/${this.currentCartGroupId}`, {
+                        // Tentukan orderId (ID keranjang customer atau 'null' untuk admin)
+                        const orderId = this.currentCartGroupId || 'null';
+                        // Di dalam fungsi checkout()
+                        let formData = new FormData();
+
+                        // Pastikan calculateChange() dipanggil dan hasilnya angka
+                        const kembalian = this.calculateChange(); 
+
+                        formData.append('payment_method', this.paymentMethod);
+                        formData.append('total_price', this.totalPrice);
+                        formData.append('amount_paid', this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid);
+                        formData.append('change', kembalian); // Pastikan ini terkirim
+                        formData.append('items', JSON.stringify(this.cart));
+                        if (this.paymentProof) {
+                            formData.append('payment_proof', this.paymentProof);
+                        }
+                        const response = await fetch(`/orders/confirm-cart/${orderId}`, {
                             method: 'POST',
                             headers: {
                                 'X-CSRF-TOKEN': document.querySelector('meta[name=csrf-token]').content
-                                // Jangan set Content-Type header jika pakai FormData, biarkan browser yang set
                             },
-                            body: formData
+                            body: formData // formData yang sudah kamu buat sebelumnya
                         });
 
+                        const result = await response.json();
+
                         if (response.ok) {
+                            // --- KUNCI PERBAIKAN DI SINI ---
+                            // Simpan data ke receiptData SEBELUM cart di-reset
+                            this.receiptData = {
+                                items: [...this.cart], // Copy isi cart
+                                total: this.totalPrice,
+                                pay: this.paymentMethod !== 'cash' ? this.totalPrice : this.amountPaid,
+                                change: this.calculateChange(),
+                                queue: this.currentQueueNumber || result.queue_number,
+                                method: this.paymentMethod
+                            };
+
+                            // Munculkan Modal
                             this.showReceipt = true;
-                            // Reset upload state
+
+                            // Reset Keranjang & Input (Sekarang aman karena struk pakai receiptData)
+                            this.cart = [];
+                            this.currentCartGroupId = null;
+                            this.currentQueueNumber = null;
+                            this.amountPaid = 0;
                             this.paymentProof = null;
                             this.paymentProofPreview = null;
                         }

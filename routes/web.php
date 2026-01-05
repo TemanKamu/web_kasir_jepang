@@ -25,3 +25,6 @@ Route::post('/orders/store', [OrderController::class, 'store'])->name('orders.st
 Route::resource('orders', OrderController::class);
 Route::post('/menus/{id}/toggle-status', [MenuController::class, 'toggleStatus']);
 Route::post('/orders/confirm-cart/{id}', [OrderController::class, 'confirmCart'])->name('orders.confirm-cart');
+Route::resource('/users', App\Http\Controllers\UserController::class);
+Route::resource('/bills', App\Http\Controllers\BillController::class);
+Route::post('/logout', [AuthController::class, 'logout'])->name('logout');

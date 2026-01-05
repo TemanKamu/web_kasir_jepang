@@ -9,73 +9,97 @@ use Illuminate\Support\Facades\Hash;
 
 class UserController extends Controller
 {
-    public function index()
+   public function index(Request $request)
     {
-        $users = User::with('role')->get();
-        return view('users.index', compact('users'));
+        $query = User::query();
+
+        // Filter berdasarkan Nama atau Email
+        if ($request->filled('search')) {
+            $query->where(function($q) use ($request) {
+                $q->where('name', 'like', '%' . $request->search . '%')
+                ->orWhere('email', 'like', '%' . $request->search . '%');
+            });
+        }
+
+        // Filter berdasarkan Tanggal Join (created_at)
+        if ($request->filled('date')) {
+            $query->whereDate('created_at', $request->date);
+        }
+
+        // Filter berdasarkan Role
+        if ($request->filled('role')) {
+            $query->where('role_id', $request->role);
+        }
+
+        // Ambil data terbaru
+        $users = $query->latest()->get();
+
+        return view('Dashboard.user', compact('users'));
     }
 
-    public function create()
-    {
-        $roles = Role::all();
-        return view('users.create', compact('roles'));
-    }
 
-    public function store(Request $request)
+   public function store(Request $request)
     {
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email',
-            'phone_number' => 'nullable|string|max:20',
+            'email' => 'required|string|email|max:255|unique:users',
+            'phone_number' => 'required|string|max:15',
             'password' => 'required|string|min:8',
-            'role_id' => 'required|exists:roles,id'
+            'role_id' => 'required|exists:roles,id', // Sesuai tabel role di ERD
         ]);
+
+        // Validasi: Cek jika role yang dipilih adalah Customer (ID 2)
+        if ($request->role_id == 2) {
+            $customerCount = User::where('role_id', 2)->count();
+            if ($customerCount >= 1) {
+                return response()->json([
+                    'errors' => ['role_id' => ['Hanya diperbolehkan memiliki 1 akun Customer untuk tablet kasir.']]
+                ], 422);
+            }
+        }
 
         User::create([
             'name' => $request->name,
             'email' => $request->email,
             'phone_number' => $request->phone_number,
             'password' => Hash::make($request->password),
-            'role_id' => $request->role_id
+            'role_id' => $request->role_id,
         ]);
 
-        return redirect()->route('users.index')->with('success', 'User created successfully');
+        return response()->json(['message' => 'User berhasil dibuat']);
     }
 
-    public function edit(User $user)
+    public function update(Request $request, $id)
     {
-        $roles = Role::all();
-        return view('users.edit', compact('user', 'roles'));
-    }
-
-    public function update(Request $request, User $user)
-    {
+        $user = User::findOrFail($id);
+        
         $request->validate([
             'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users,email,' . $user->id,
-            'phone_number' => 'nullable|string|max:20',
-            'password' => 'nullable|string|min:8',
-            'role_id' => 'required|exists:roles,id'
+            'email' => 'required|string|email|max:255|unique:users,email,' . $id,
+            'phone_number' => 'required|string|max:20', // Tambahkan validasi ini
+            'role_id' => 'required|exists:roles,id',
         ]);
 
-        $data = [
+        $user->update([
             'name' => $request->name,
             'email' => $request->email,
-            'phone_number' => $request->phone_number,
-            'role_id' => $request->role_id
-        ];
+            'phone_number' => $request->phone_number, // Tambahkan validasi ini
+            'role_id' => $request->role_id,
+        ]);
 
+        // Update password jika diisi
         if ($request->filled('password')) {
-            $data['password'] = Hash::make($request->password);
+            $user->update(['password' => Hash::make($request->password)]);
         }
 
-        $user->update($data);
-        return redirect()->route('users.index')->with('success', 'User updated successfully');
+        return response()->json(['status' => 'success', 'message' => 'User berhasil diperbarui']);
     }
 
-    public function destroy(User $user)
+   public function destroy($id)
     {
+        $user = User::findOrFail($id);
         $user->delete();
-        return redirect()->route('users.index')->with('success', 'User deleted successfully');
+
+        return response()->json(['status' => 'success', 'message' => 'User berhasil dihapus']);
     }
 }
